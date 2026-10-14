@@ -74,7 +74,9 @@ lc_config_defaults <- function(raw) {
       gap = podcast$gap %||% 0.35,
       mode = podcast$mode,
       host_a_name = podcast$host_a_name %||% "Host A",
-      host_b_name = podcast$host_b_name %||% "Host B"
+      host_b_name = podcast$host_b_name %||% "Host B",
+      continuity = isTRUE(podcast$continuity),
+      dialogue_settings = podcast$dialogue_settings
     )
   )
 }

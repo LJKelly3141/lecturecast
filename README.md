@@ -6,7 +6,7 @@ Each slide's speaker notes are its script. lecturecast voices them, captures the
 
 ## What it makes
 
-- **Lecture videos.** `<deck>.mp4`, captions (`<deck>.vtt`) and a transcript (`<deck>-transcript.md`). Fragments appear when the narration reaches them. A quoted button name in the notes, such as "AD falls", plays that chart button at that moment. Optional title and end cards.
+- **Lecture videos.** `<deck>.mp4`, captions (`<deck>.vtt`) and a transcript (`<deck>-transcript.md`). Fragments appear when the narration reaches them. A play tag in the notes, such as `[play: AD falls]`, plays that chart button at exactly that point; the voice never reads it, and the narration waits for the animation to finish. Optional title and end cards.
 - **Podcasts.** `<episode>.mp3` with embedded chapters, a transcript and a chapter list, from a plain-text two-host script.
 
 The voice is a setting: Microsoft Edge voices (free, no account), ElevenLabs (stock or cloned voices, with an ElevenLabs account), or your own recordings. If the chosen voice fails, the build stops; it never switches to another voice.

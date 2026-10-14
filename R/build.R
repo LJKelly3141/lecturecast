@@ -51,6 +51,12 @@ build_video <- function(deck, config = NULL, out_dir = NULL, work_dir = NULL,
   title <- lc_deck_title(b, deck)
   segs <- lc_segments(slides, cfg$video$silent, split_fragments = isTRUE(cfg$video$fragments %||% TRUE), deck = deck)
   segs <- lc_select_slides(segs, slides, chosen, deck)
+  # [play: label] tags come out of the spoken text; the pieces between them
+  # are voiced separately so each animation starts exactly at its tag.
+  parsed <- lapply(segs$text, lc_parse_tags)
+  segs$text <- vapply(parsed, function(p) p$text, "")
+  segs$pieces <- lapply(parsed, function(p) p$pieces)
+  segs$tags <- lapply(parsed, function(p) p$tags)
   n_voiced <- sum(is.na(segs$silent))
   lc_say(quiet, sprintf("Script: %d slides, %d segments (%d voiced, %d silent).",
                         nrow(slides), nrow(segs), n_voiced, nrow(segs) - n_voiced))
@@ -70,7 +76,12 @@ build_video <- function(deck, config = NULL, out_dir = NULL, work_dir = NULL,
     lc_screenshot(b, segs$png[i], wh[1], wh[2], deck)
     if (!isTRUE(cfg$video$animations) || !is.na(segs$silent[i])) next
     key <- as.character(segs$slide[i])
-    ev <- lc_segment_events(segs$text[i], slides$buttons[[segs$slide[i]]], played[[key]] %||% character(0))
+    buttons <- slides$buttons[[segs$slide[i]]]
+    ev <- if (nrow(segs$tags[[i]])) {
+      lc_tag_events(segs$tags[[i]], buttons, segs$slide[i], lc_title(segs[i, ]), deck)
+    } else {
+      lc_segment_events(segs$text[i], buttons, played[[key]] %||% character(0))
+    }
     if (nrow(ev) == 0) next
     played[[key]] <- c(played[[key]], lc_label_key(ev$label))
     events[[i]] <- ev
@@ -88,10 +99,23 @@ build_video <- function(deck, config = NULL, out_dir = NULL, work_dir = NULL,
   # Voice. Segments already voiced with the same text and settings come
   # from the cache and cost nothing.
   timings <- vector("list", nrow(segs))
+  at <- vector("list", nrow(segs))
   segs$audio <- NA_character_
   reused <- 0L
   for (i in which(is.na(segs$silent))) {
-    v <- voice(segs[i, ], file.path(work, "audio", paste0(segs$id[i], ".mp3")))
+    # Recorded narration is one file per segment, so its tags are placed by
+    # the timing estimate, as quotes are.
+    tagged <- !is.null(events[[i]]) && "over" %in% names(events[[i]]) && cfg$voice$provider != "recorded"
+    v <- if (tagged) {
+      seg_id <- segs$id[i]
+      tv <- lc_voice_tagged(segs$pieces[[i]], events[[i]], captured[[i]],
+                            function(txt, out) voice(list(text = txt, id = seg_id), out),
+                            cfg, file.path(work, "audio", seg_id))
+      at[i] <- list(tv$at)
+      tv
+    } else {
+      voice(segs[i, ], file.path(work, "audio", paste0(segs$id[i], ".mp3")))
+    }
     segs$audio[i] <- v$file
     timings[i] <- list(v$timing)
     reused <- reused + isTRUE(v$cached)
@@ -110,7 +134,7 @@ build_video <- function(deck, config = NULL, out_dir = NULL, work_dir = NULL,
     if (is.na(segs$silent[i])) segs$audio_seconds[i] <- lc_duration(segs$audio[i], "assemble")
     segs$clip_seconds[i] <- if (!is.null(events[[i]])) {
       sched <- lc_animation_schedule(segs$png[i], events[[i]], captured[[i]], segs$text[i], timings[[i]],
-                                     segs$audio_seconds[i], cfg)
+                                     segs$audio_seconds[i], cfg, at = at[[i]])
       lc_animated_clip(sched, segs$audio[i], segs$clip[i], cfg)
     } else if (is.na(segs$silent[i])) {
       lc_still_clip(segs$png[i], segs$clip[i], cfg, audio = segs$audio[i])

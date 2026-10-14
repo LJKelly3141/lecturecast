@@ -70,7 +70,17 @@ lc_visual_changes <- function(text, buttons, n_fragments = 0L) {
   labels <- if (is.null(buttons) || !is.data.frame(buttons)) character(0) else buttons$label
   keys <- lc_label_key(labels)
   quoted <- character(0)
-  if (length(keys)) {
+  unknown <- character(0)
+  tg <- gregexpr(lc_tag_regex, enc2utf8(text), perl = TRUE)[[1]]
+  if (tg[1] > 0) {
+    # Tags mark the changes exactly; quotes are then ordinary text.
+    tl <- trimws(sub(lc_tag_regex, "\\1", regmatches(enc2utf8(text), list(tg))[[1]], perl = TRUE))
+    at <- c(at, as.integer(tg))
+    kind <- c(kind, rep("button", length(tg)))
+    tk <- lc_label_key(tl)
+    quoted <- unique(tk[tk %in% keys])
+    unknown <- unique(tl[!tk %in% keys])
+  } else if (length(keys)) {
     m <- gregexpr("(*UTF8)[\"\\x{201c}]([^\"\\x{201c}\\x{201d}]+)[\"\\x{201d}]", enc2utf8(text), perl = TRUE)[[1]]
     if (m[1] > 0) {
       ph <- regmatches(enc2utf8(text), list(m))[[1]]
@@ -85,7 +95,7 @@ lc_visual_changes <- function(text, buttons, n_fragments = 0L) {
   # already on screen, so it need not be cued.
   playable <- if (length(labels)) buttons$button > 0 else logical(0)
   o <- order(at)
-  list(at = at[o], kind = kind[o], uncued = unique(labels[playable & !keys %in% quoted]))
+  list(at = at[o], kind = kind[o], uncued = unique(labels[playable & !keys %in% quoted]), unknown = unknown)
 }
 
 # Stretches of narration with nothing changing on screen, one per gap
@@ -95,6 +105,7 @@ lc_still_stretches <- function(text, at) {
   cuts <- c(1L, at, nchar(text) + 1L)
   out <- lapply(seq_len(length(cuts) - 1), function(k) {
     piece <- substr(text, cuts[k], cuts[k + 1] - 1)
+    piece <- gsub(lc_tag_regex, " ", piece, perl = TRUE)
     piece <- trimws(gsub("(^|\n)\\s*(---|\\|)\\s*(\n|$)", " ", piece, perl = TRUE))
     n <- if (nzchar(piece)) length(strsplit(piece, "\\s+")[[1]]) else 0
     data.frame(words = n, start = piece, after = k - 1L, stringsAsFactors = FALSE)
@@ -127,9 +138,13 @@ lc_lint_slides <- function(slides, max_words = 30, max_still = 30, words_per_sec
     }
     raw <- paste0("\n", s$notes, "\n")
     ch <- lc_visual_changes(raw, buttons, s$n_fragments)
+    if (length(ch$unknown)) {
+      add(s, "unknown tag", paste(sprintf("[play: %s]", ch$unknown), collapse = " "), "",
+          "No chart button on this slide has that label, so the build will stop. Use a label exactly as the button shows it.")
+    }
     if (length(ch$uncued)) {
       add(s, "animation not cued", paste(sprintf("\"%s\"", ch$uncued), collapse = " "), "",
-          "The chart has buttons the narration never plays. Quote each label in the notes at the moment it should play.")
+          "The chart has buttons the narration never plays. Put [play: label] in the notes at the moment each should play.")
     }
     st <- lc_still_stretches(raw, ch$at)
     st$secs <- st$words / words_per_second
@@ -137,7 +152,7 @@ lc_lint_slides <- function(slides, max_words = 30, max_still = 30, words_per_sec
     for (k in which(st$after_button & st$secs > max_still)) {
       add(s, "static after animation", sprintf("about %d s unchanged", round(st$secs[k])), lc_sentences(st$start[k])[1],
           paste0("The narration walks through what the animation showed while the chart sits at its end. ",
-                 "Give the chart a button for each step that jumps to that step's state, and quote its label as each step is discussed, ",
+                 "Give the chart a button for each step that jumps to that step's state, and put [play: label] where each step is discussed, ",
                  "so the whole plays first and then each step is shown again as it is explained."))
     }
     other <- st[!st$after_button, ]
@@ -145,9 +160,9 @@ lc_lint_slides <- function(slides, max_words = 30, max_still = 30, words_per_sec
       k <- which.max(other$secs)
       add(s, "static slide", sprintf("about %d s unchanged", round(other$secs[k])), lc_sentences(other$start[k])[1],
           paste0("Show, don't just tell. Reveal the points as they are spoken (fragments, with --- between their notes), ",
-                 "play a chart step by quoting its button, or split the slide."))
+                 "play a chart step with a [play: label] tag, or split the slide."))
     }
-    text <- gsub("\n\\s*(---|\\|)\\s*\n", "\n\n", raw)
+    text <- gsub("\n\\s*(---|\\|)\\s*\n", "\n\n", gsub(lc_tag_regex, "", raw, perl = TRUE))
     for (sent in lc_sentences(text)) {
       for (issue in names(lc_lint_rules)) {
         r <- lc_lint_rules[[issue]]

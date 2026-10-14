@@ -31,9 +31,12 @@ this skill is where drafting happens, and the instructor decides.
    current workspace, write the proposals to a file in the current project
    and ask before touching the deck.
 4. **Keep what lecturecast depends on:**
-   - Quoted button names (`"AD falls"`, `"Play"`, `"Round 1"`) must stay in
-     quotes, spelled exactly as the chart button, or the animation will not
-     play. Leave abbreviations inside them alone.
+   - Play tags (`[play: AD falls]`) must name a chart button on the slide
+     exactly as the button shows it (case and end punctuation aside), or the
+     build stops. The voice never reads a tag, so the sentence around it
+     must make sense without it. Older decks cue charts by quoting the label
+     in the narration ("AD falls"); keep those quotes exact, or convert them
+     to tags.
    - A `---` line between parts of a slide's notes marks a fragment step.
      Keep the same number of parts.
    - A slide with no notes must stay silent (`data-silent` or
@@ -98,10 +101,16 @@ partly the script and partly how the slide is built, so fix both.
     around a list, or a `::: {.fragment}` block around each point) and split the notes with a line
     holding only `---` before each point's narration: one more part than
     the slide has fragment steps, the first part playing before any appears.
-  - *Chart steps.* Every playable button on a chart gets cued: quote its
-    label in the notes at the moment it should play ("AD falls"). The first
-    button of each chart shows the starting state and need not be cued.
-    `lint_notes()` reports buttons the narration never plays.
+  - *Chart steps.* Every playable button on a chart gets a play tag at the
+    exact point in the notes where it should play:
+    `Watch what happens when demand falls. [play: AD falls] Real GDP drops...`
+    The narration is voiced in pieces split at the tags. The animation
+    starts as the words before the tag end, and the narration waits for it
+    to finish before going on, so voice and chart stay in step. For a long
+    animation the voice should talk over, write `[play: Play, over]`: the
+    chart starts at the tag and the narration carries on. The first button
+    of each chart shows the starting state and need not be tagged.
+    `lint_notes()` reports buttons never played and tags naming no button.
   - *More steps.* If a chart's story has a long explanation before its first
     button, add a button (or a fragment) for the part being explained, so
     the viewer sees it as it is described. This is a change to the slide,
@@ -110,15 +119,17 @@ partly the script and partly how the slide is built, so fix both.
     multi-step story (a tariff in three steps) and the narration then walks
     through the steps, the chart must not sit at its end state. Give the
     chart one button per step whose frames are just that step's end state
-    (a single frame, `transition: {duration: 0}`), and quote each step's
-    label as that step is discussed. The whole plays first; then the chart
+    (a single frame, `transition: {duration: 0}`), and put a tag for each
+    step (`[play: Inputs cost more]`) where that step is discussed. The whole plays first; then the chart
     jumps back to step 1, step 2 and step 3 in time with the explanation.
-    Step labels are read aloud, so make them short phrases that work as
-    speech ("Inputs cost more", "Demand falls", "Target restored").
+    Tags are not read aloud, so step labels can be any short name. Put
+    the step buttons in a second updatemenus entry with `visible: false`:
+    the visible button row stays short and does not overflow, and
+    lecturecast still finds and plays hidden buttons on cue.
     `lint_notes()` reports this as `static after animation`.
   - *Split the slide.* Two ideas, two slides.
 - **Script the animations.** Every chart slide's notes say what plays and
-  when, by quoting the button label; describe what the viewer is watching
+  when, with play tags; describe what the viewer is watching
   ("Watch the supply curve slide right") rather than only stating results.
 
 ## Spoken forms

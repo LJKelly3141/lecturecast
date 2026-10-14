@@ -50,7 +50,7 @@ transition, and give the title slide a short intro with
 slide short. On a slide you explain at length, reveal the points one at a
 time as you reach them, or play a chart step, so the screen changes at
 least every half minute. When one button plays a whole multi-step story,
-give each step its own button that jumps to that step, and quote it as you
+give each step its own button that jumps to that step, and tag it where you
 explain the step, so the viewer sees the whole and then each part.
 
 ## How lecturecast reads the notes
@@ -60,10 +60,15 @@ explain the step, so the viewer sees the whole and then each part.
 - **Fragments.** On a slide with fragments, put a line holding only `---`
   before each fragment's narration. The notes then need one part more than
   the slide has fragments: the first part plays before any fragment appears.
-- **Animated charts.** A phrase in quotes that matches a button label on the
-  slide, such as "AD falls", plays that button when the narration reaches it.
-  Only the first mention on a slide plays. A quoted phrase that matches no
-  button is read as ordinary text.
+- **Animated charts.** A play tag names a chart button on the slide and marks
+  exactly where it plays: `Watch demand fall. [play: AD falls] Output drops.`
+  The voice never reads the tag. The narration is voiced in pieces split at
+  the tags, the animation starts where the words before the tag end, and the
+  narration waits for it to finish. `[play: Play, over]` lets the narration
+  carry on while the chart plays. A tag naming no button on the slide stops
+  the build. Notes without tags can instead quote a button label in the
+  narration ("AD falls"); its place is then estimated from the voice timing,
+  which can be off by a second or two.
 - **Silent slides.** A slide with no notes stops the build, unless it is marked
   silent with a length in seconds, either with `data-silent` on the slide or
   under `video: silent:` in `lecturecast.yml`.
@@ -92,7 +97,8 @@ It reports:
 | room | "the room", "in class", "click", "your neighbor" |
 | long sentence | more than `max_words` words (30 by default) |
 | dead air | a slide with nothing said, including the title slide |
-| animation not cued | a chart button the notes never quote, so it never plays |
+| animation not cued | a chart button the notes never play, so it never moves |
+| unknown tag | a `[play: ...]` tag naming no button on the slide |
 | static slide | narration running longer than `max_still` seconds (30 by default) with nothing changing on screen |
 | static after animation | narration walking through an animation's steps after it has finished, while the chart sits at its end |
 

@@ -107,10 +107,10 @@ lc_capture_event <- function(b, ev, base, wh, deck) {
 }
 
 # The picture schedule for an animated segment: which image shows from when.
-# Each animation starts when the narration reaches its quote, or when the
-# one before it ends, whichever is later. Returns the images, their display
+# Each animation starts when the narration reaches its quote or tag, or when
+# the one before it ends, whichever is later. Returns the images, their display
 # lengths and the clip's total length.
-lc_animation_schedule <- function(still, events, captured, text, timing, a_dur, cfg) {
+lc_animation_schedule <- function(still, events, captured, text, timing, a_dur, cfg, at = NULL) {
   v <- cfg$video
   f <- lc_time_map(text, timing, a_dur)
   sentences <- lc_sentences(text)
@@ -121,10 +121,12 @@ lc_animation_schedule <- function(still, events, captured, text, timing, a_dur, 
   current <- still
   for (k in seq_len(nrow(events))) {
     cap <- captured[[k]]
-    start <- max(now, v$lead_in + f$start(events$pos[k]))
+    # `at` gives exact start times (seconds into the narration) for tagged
+    # animations; otherwise the quote's place in the narration is estimated.
+    start <- max(now, v$lead_in + if (is.null(at)) f$start(events$pos[k]) else at[k])
     frame_s <- cap$seconds / v$animation_speed
     run <- frame_s * length(cap$files)
-    if (v$animation_pace == "sentence") {
+    if (is.null(at) && v$animation_pace == "sentence") {
       end_pos <- sent_end[which(sent_end > events$pos[k])[1]] %||% max(sent_end)
       span <- v$lead_in + f$end(end_pos) - start
       if (span > run) {

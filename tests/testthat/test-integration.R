@@ -119,3 +119,36 @@ test_that("a step button after the whole story jumps the chart back to that step
   expect_lt(psnr(step, whole[3]), 40)
   expect_true(file.exists(r$video))
 })
+
+
+test_that("play tags split the narration so each animation starts at its tag", {
+  skip_on_cran()
+  skip_on_ci()
+  skip_if_no_ffmpeg()
+  skip_if(!nzchar(Sys.which("quarto")), "Quarto not installed")
+  skip_if(!nzchar(lc_find_chrome()), "Chrome not found")
+  skip_if_not_installed("plotly")
+
+  dir <- withr::local_tempdir()
+  file.copy(test_path("fixtures", "animation-tags.qmd"), dir)
+  processx::run("quarto", c("render", "animation-tags.qmd"), wd = dir)
+  spoken <- character(0)
+  local_mocked_bindings(lc_voice = function(text, voice_id, cfg, out, model = NULL) {
+    spoken <<- c(spoken, text)
+    processx::run("ffmpeg", c("-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=duration=1", out))
+    list(file = out, timing = data.frame(text = text, start = 0, end = 1))
+  }, lc_edge_command = function() "edge-tts", lc_edge_engine = function() "edge-tts@test")
+  cfg <- write_config(c("voice:", "  provider: edge", "  narrator: x",
+                        "video:", "  resolution: 720p", "  lead_in: 0.2", "  tail: 0.3", "  crossfade: 0",
+                        "  title_card: false", "  silent:", "    \"1\": 1"), dir = dir)
+  r <- build_video(file.path(dir, "animation-tags.qmd"), config = cfg, out_dir = file.path(dir, "out"),
+                   cache_dir = file.path(dir, "cache"), quiet = TRUE)
+  # The tags are never spoken; the narration is voiced in three pieces.
+  expect_equal(spoken, c("Here is the point.", "It climbed. Back to the start of the climb.", "That is step one."))
+  # Pieces of 1 s, the whole story (3 frames of 0.2 s) and the step (0 s),
+  # each followed by 0.15 s before the narration resumes.
+  seg <- r$segments[r$segments$id == "s03", ]
+  expect_equal(seg$audio_seconds, 1 + 0.6 + 0.15 + 1 + 0 + 0.15 + 1, tolerance = 0.1)
+  expect_false(any(grepl("play:", readLines(r$transcript))))
+  expect_false(any(grepl("play:", readLines(r$captions))))
+})

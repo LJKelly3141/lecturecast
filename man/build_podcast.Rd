@@ -7,7 +7,7 @@
 build_podcast(
   script,
   config = NULL,
-  out_dir = dirname(script),
+  out_dir = NULL,
   cache_dir = NULL,
   quiet = FALSE
 )
@@ -18,7 +18,9 @@ build_podcast(
 \item{config}{Path to a settings file. By default \code{lecturecast.yml} is
 looked for next to the script and in parent folders.}
 
-\item{out_dir}{Folder for the finished files.}
+\item{out_dir}{Folder for the finished files. Defaults to
+\verb{podcast: out_dir:} in \code{lecturecast.yml} (relative to that file), else
+the script's folder.}
 
 \item{cache_dir}{Folder holding voiced audio for reuse.}
 

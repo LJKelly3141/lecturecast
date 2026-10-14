@@ -7,6 +7,8 @@ test_that("each kind of issue is found and named", {
     paste(rep("word", 31), collapse = " ")
   ))
   out <- lc_lint_slides(slides)
+  expect_equal(out$slide[out$issue == "acronym"], c(1L, 4L))
+  out <- out[out$issue != "acronym", ]
   expect_equal(out$issue, c("symbol", "abbreviation", "link", "room", "long sentence"))
   expect_equal(out$slide, 1:5)
   expect_equal(out$found[1], "% ₁")
@@ -56,4 +58,35 @@ test_that("lint_notes reads a real deck", {
   out <- lint_notes(file.path(dir, "fragments.html"), quiet = TRUE)
   expect_s3_class(out, "data.frame")
   expect_named(out, c("slide", "title", "issue", "found", "sentence", "advice"))
+})
+
+test_that("economics and statistics abbreviations come with the words to say", {
+  out <- lc_lint_slides(fake_slides("When AD falls, SRAS stays put and MPCs differ."))
+  expect_equal(out$issue, "acronym")
+  expect_equal(out$found, "AD SRAS MPC")
+  expect_match(out$advice, "SRAS as \"short-run aggregate supply\"")
+  expect_match(out$advice, "AD as \"aggregate demand\"")
+  out <- lc_lint_slides(fake_slides("The SE and the 95 CI come from OLS with 3 df."))
+  expect_equal(out$found, "SE CI OLS df")
+})
+
+test_that("ordinary words and letter-spoken abbreviations are not flagged as acronyms", {
+  ok <- c("As GDP rose, the CPI and the Fed held.", "Advertising has a bad name, as does Ha.",
+"The SDK and MCAT are unrelated.")
+  out <- lc_lint_slides(fake_slides(ok))
+  expect_false("acronym" %in% out$issue)
+})
+
+test_that("an abbreviation next to a subscript is still found", {
+  out <- lc_lint_slides(fake_slides("Then AD₁ shifts left."))
+  expect_true("acronym" %in% out$issue)
+})
+
+test_that("the lecture-video skill's spoken forms match the lint list", {
+  skill <- system.file("skills", "lecture-video", "SKILL.md", package = "lecturecast")
+  skip_if(!nzchar(skill), "skill not installed")
+  rows <- grep("^\\| [A-Za-z0-9]+ \\| [^|]+ \\|$", readLines(skill), value = TRUE)
+  parts <- strsplit(sub("^\\| ", "", sub(" \\|$", "", rows)), " | ", fixed = TRUE)
+  table <- setNames(vapply(parts, `[`, "", 2), vapply(parts, `[`, "", 1))[-1]
+  expect_equal(table, lc_spoken_forms)
 })

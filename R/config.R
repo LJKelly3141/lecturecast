@@ -71,7 +71,8 @@ lc_config_defaults <- function(raw) {
       lead_in = video$lead_in %||% 0.3,
       tail = video$tail %||% 0.5,
       card_seconds = video$card_seconds %||% 4,
-      silent = video$silent %||% list()
+      silent = video$silent %||% list(),
+      out_dir = video$out_dir
     ),
     podcast = list(
       gap = podcast$gap %||% 0.35,
@@ -79,7 +80,8 @@ lc_config_defaults <- function(raw) {
       host_a_name = podcast$host_a_name %||% "Host A",
       host_b_name = podcast$host_b_name %||% "Host B",
       continuity = isTRUE(podcast$continuity),
-      dialogue_settings = podcast$dialogue_settings
+      dialogue_settings = podcast$dialogue_settings,
+      out_dir = podcast$out_dir
     )
   )
 }
@@ -134,11 +136,32 @@ lc_config_validate <- function(cfg, path) {
   if (!is.numeric(cfg$podcast$gap) || length(cfg$podcast$gap) != 1 || cfg$podcast$gap < 0) {
     lc_abort(step, "podcast: gap: must be a number of seconds.", file = path)
   }
+  for (sec in c("video", "podcast")) {
+    d <- cfg[[sec]]$out_dir
+    if (!is.null(d) && (!is.character(d) || length(d) != 1 || !nzchar(d))) {
+      lc_abort(step, paste0(sec, ": out_dir: must be a folder path."), file = path)
+    }
+  }
   if (!cfg$video$resolution %in% names(lc_resolutions)) {
     lc_abort(step, paste0("video: resolution: must be one of ", paste(names(lc_resolutions), collapse = ", "), "."),
              file = path)
   }
   invisible(TRUE)
+}
+
+# A folder named in the settings file. A relative path is relative to the
+# settings file's folder, so a course-root lecturecast.yml can say
+# out_dir: build/video.
+lc_settings_dir <- function(cfg, x) {
+  if (is.null(x)) return(NULL)
+  if (grepl("^(/|~|[A-Za-z]:)", x)) return(path.expand(x))
+  file.path(dirname(cfg$path), x)
+}
+
+# Where finished files go: the function argument, else the settings file's
+# out_dir for that product, else beside the input.
+lc_out_dir <- function(arg, cfg, section, input) {
+  arg %||% lc_settings_dir(cfg, cfg[[section]]$out_dir) %||% dirname(input)
 }
 
 lc_resolutions <- list(

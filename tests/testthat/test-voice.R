@@ -13,7 +13,9 @@ test_that("ElevenLabs failures say why and never fall back", {
   cases <- list(
     list(status = 401L, body = '{"detail":{"status":"invalid_api_key","message":"bad"}}', msg = "refused"),
     list(status = 402L, body = '{"detail":"x"}', msg = "credits"),
-    list(status = 401L, body = '{"detail":{"status":"quota_exceeded","message":"none left"}}', msg = "out of credits")
+    list(status = 401L, body = '{"detail":{"status":"quota_exceeded","message":"none left"}}', msg = "out of credits"),
+    list(status = 401L, body = '{"detail":{"status":"missing_permissions","message":"The API key you used is missing the permission text_to_speech to execute this operation."}}',
+         msg = "text_to_speech(.|\\n)*lacks the permission")
   )
   for (cs in cases) {
     httr2::local_mocked_responses(function(req) {

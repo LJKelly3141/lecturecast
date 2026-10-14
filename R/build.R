@@ -9,18 +9,22 @@
 #' @param deck Path to the rendered reveal.js HTML file.
 #' @param config Path to a settings file. By default `lecturecast.yml` is
 #'   looked for next to the deck and in parent folders up to the course root.
-#' @param out_dir Folder for the finished files. Defaults to the deck's folder.
+#' @param out_dir Folder for the finished files. Defaults to `video: out_dir:`
+#'   in `lecturecast.yml` (relative to that file), else the deck's folder.
 #' @param work_dir Folder for intermediate files (captures, audio, clips). By
 #'   default a temporary folder that is removed after a successful build.
 #' @param cache_dir Folder holding voiced segments for reuse. Defaults to the
 #'   `lecturecast.cache_dir` option, else the user cache folder from
 #'   [tools::R_user_dir()].
+#' @param slides Slide numbers to build, as `lecture_script()` numbers them,
+#'   for a test or a partial video. By default every slide. The whole deck's
+#'   notes are still checked.
 #' @param quiet If `TRUE`, print only errors.
 #' @return Invisibly, a list with the paths of the video, captions and
 #'   transcript, and the video's duration in seconds.
 #' @export
-build_video <- function(deck, config = NULL, out_dir = dirname(deck), work_dir = NULL,
-                        cache_dir = NULL, quiet = FALSE) {
+build_video <- function(deck, config = NULL, out_dir = NULL, work_dir = NULL,
+                        cache_dir = NULL, slides = NULL, quiet = FALSE) {
   lc_check_deck(deck)
   deck <- normalizePath(deck)
   cfg <- lecturecast_config(deck, config)
@@ -32,7 +36,7 @@ build_video <- function(deck, config = NULL, out_dir = dirname(deck), work_dir =
   work <- lc_dir_create(work_dir %||% tempfile(paste0("lecturecast-", name, "-")))
   if (!keep_work) on.exit(if (isTRUE(ok)) unlink(work, recursive = TRUE), add = TRUE)
   ok <- FALSE
-  out_dir <- lc_dir_create(out_dir)
+  out_dir <- lc_dir_create(lc_out_dir(out_dir, cfg, "video", deck))
   for (d in c("png", "audio", "clips")) lc_dir_create(file.path(work, d))
   cache <- lc_cache_dir(cache_dir)
 
@@ -40,9 +44,11 @@ build_video <- function(deck, config = NULL, out_dir = dirname(deck), work_dir =
   b <- lc_open_deck(deck, wh[1], wh[2])
   chrome_open <- TRUE
   on.exit(if (chrome_open) try(b$close(), silent = TRUE), add = TRUE)
+  chosen <- slides
   slides <- lc_read_slides(b, deck)
   title <- lc_deck_title(b, deck)
   segs <- lc_segments(slides, cfg$video$silent, split_fragments = isTRUE(cfg$video$fragments %||% TRUE), deck = deck)
+  segs <- lc_select_slides(segs, slides, chosen, deck)
   n_voiced <- sum(is.na(segs$silent))
   lc_say(quiet, sprintf("Script: %d slides, %d segments (%d voiced, %d silent).",
                         nrow(slides), nrow(segs), n_voiced, nrow(segs) - n_voiced))
@@ -137,6 +143,28 @@ build_video <- function(deck, config = NULL, out_dir = dirname(deck), work_dir =
   lc_done(quiet, sprintf("Completed: %s (%s), captions and transcript checked.", final[1], lc_hms(total)))
   invisible(list(video = final[1], captions = final[2], transcript = final[3], seconds = total,
                  segments = segs))
+}
+
+# Keep only the segments of the chosen slides, numbered as lecture_script()
+# numbers them. NULL keeps every slide.
+lc_select_slides <- function(segs, slides, chosen, deck) {
+  if (is.null(chosen)) return(segs)
+  n <- nrow(slides)
+  if (!is.numeric(chosen) || length(chosen) == 0 || anyNA(chosen) || any(chosen != round(chosen))) {
+    lc_abort("script", "slides must be whole slide numbers, such as 1:9.", file = deck)
+  }
+  bad <- setdiff(chosen, seq_len(n))
+  if (length(bad)) {
+    lc_abort("script", sprintf("The deck has %d slides, so these do not exist: %s.", n, paste(bad, collapse = ", ")),
+             file = deck, fix = "Use the slide numbers shown by lecture_script().")
+  }
+  segs <- segs[segs$slide %in% chosen, ]
+  rownames(segs) <- NULL
+  if (all(!is.na(segs$silent))) {
+    lc_abort("script", "Every chosen slide is silent, so there is nothing to voice.", file = deck,
+             fix = "Include at least one slide with speaker notes.")
+  }
+  segs
 }
 
 # The order of clips in the video, with fades between pictures. Returns a

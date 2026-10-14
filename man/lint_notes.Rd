@@ -20,8 +20,9 @@ Invisibly, a data frame with one row per issue and columns \code{slide},
 \description{
 Reads the rendered deck's speaker notes and reports what a listener will
 stumble on: symbols and subscripts, abbreviations such as "e.g.", web
-addresses, phrases written for the live room ("the room can see",
-"click"), and long sentences. Nothing is changed; edit the notes in the
+addresses, economics and statistics abbreviations such as "SRAS" (with
+the words to say instead), phrases written for the live room ("the room
+can see", "click"), and long sentences. Nothing is changed; edit the notes in the
 deck's source and render it again. See
 \code{vignette("narration", package = "lecturecast")} for the reasoning.
 }

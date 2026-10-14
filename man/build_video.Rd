@@ -7,9 +7,10 @@
 build_video(
   deck,
   config = NULL,
-  out_dir = dirname(deck),
+  out_dir = NULL,
   work_dir = NULL,
   cache_dir = NULL,
+  slides = NULL,
   quiet = FALSE
 )
 }
@@ -19,7 +20,8 @@ build_video(
 \item{config}{Path to a settings file. By default \code{lecturecast.yml} is
 looked for next to the deck and in parent folders up to the course root.}
 
-\item{out_dir}{Folder for the finished files. Defaults to the deck's folder.}
+\item{out_dir}{Folder for the finished files. Defaults to \verb{video: out_dir:}
+in \code{lecturecast.yml} (relative to that file), else the deck's folder.}
 
 \item{work_dir}{Folder for intermediate files (captures, audio, clips). By
 default a temporary folder that is removed after a successful build.}
@@ -27,6 +29,10 @@ default a temporary folder that is removed after a successful build.}
 \item{cache_dir}{Folder holding voiced segments for reuse. Defaults to the
 \code{lecturecast.cache_dir} option, else the user cache folder from
 \code{\link[tools:R_user_dir]{tools::R_user_dir()}}.}
+
+\item{slides}{Slide numbers to build, as \code{lecture_script()} numbers them,
+for a test or a partial video. By default every slide. The whole deck's
+notes are still checked.}
 
 \item{quiet}{If \code{TRUE}, print only errors.}
 }

@@ -20,6 +20,41 @@ lc_lint_rules <- list(
   )
 )
 
+# Economics and statistics abbreviations a voice reads as a word or as
+# letters, with what to say instead. Matched as capitalized here, whole
+# words only, with an optional plural "s". Abbreviations people say as
+# letters (GDP, CPI, Fed) are left alone.
+lc_spoken_forms <- c(
+  # Macroeconomics
+  AD = "aggregate demand", AS = "aggregate supply",
+  SRAS = "short-run aggregate supply", LRAS = "long-run aggregate supply",
+  MPC = "marginal propensity to consume", MPS = "marginal propensity to save",
+  MPI = "marginal propensity to import",
+  NX = "net exports", NNP = "net national product",
+  NAIRU = "the non-accelerating inflation rate of unemployment",
+  FOMC = "the Federal Open Market Committee",
+  # Microeconomics
+  PPF = "production possibilities frontier", PPC = "production possibilities curve",
+  MC = "marginal cost", MR = "marginal revenue", MB = "marginal benefit", MU = "marginal utility",
+  TC = "total cost", TR = "total revenue", FC = "fixed cost", VC = "variable cost",
+  ATC = "average total cost", AVC = "average variable cost", AFC = "average fixed cost",
+  MPL = "marginal product of labor", MRP = "marginal revenue product",
+  MRS = "marginal rate of substitution", DWL = "deadweight loss",
+  # Statistics
+  SD = "standard deviation", SE = "standard error", CI = "confidence interval",
+  df = "degrees of freedom", OLS = "ordinary least squares",
+  MLE = "maximum likelihood estimate", IID = "independent and identically distributed",
+  CDF = "cumulative distribution function", SSE = "sum of squared errors",
+  SSR = "sum of squared residuals", SST = "total sum of squares",
+  MSE = "mean squared error", RMSE = "root mean squared error",
+  ANOVA = "analysis of variance", H0 = "the null hypothesis", H1 = "the alternative hypothesis"
+)
+
+lc_spoken_pattern <- function() {
+  keys <- names(lc_spoken_forms)[order(-nchar(names(lc_spoken_forms)))]
+  paste0("(?<![\\w.])(", paste(keys, collapse = "|"), ")s?(?![\\w])")
+}
+
 # One row per issue in a set of slides from lc_read_slides().
 lc_lint_slides <- function(slides, max_words = 30) {
   rows <- list()
@@ -37,6 +72,14 @@ lc_lint_slides <- function(slides, max_words = 30) {
         r <- lc_lint_rules[[issue]]
         m <- regmatches(sent, gregexpr(r$pattern, sent, perl = TRUE))[[1]]
         if (length(m)) add(s, issue, paste(unique(m), collapse = " "), sent, r$advice)
+      }
+      m <- regmatches(sent, gregexpr(lc_spoken_pattern(), sent, perl = TRUE))[[1]]
+      if (length(m)) {
+        keys <- unique(sub("s$", "", m))
+        say <- paste(sprintf("%s as \"%s\"", keys, lc_spoken_forms[keys]), collapse = "; ")
+        add(s, "acronym", paste(keys, collapse = " "), sent,
+            paste0("The voice reads these as a word or as letters. Say ", say,
+                   ". If one is inside a quoted button name, leave the quote as it is."))
       }
       n <- length(strsplit(trimws(sent), "\\s+")[[1]])
       if (n > max_words) {
@@ -56,8 +99,9 @@ lc_lint_slides <- function(slides, max_words = 30) {
 #'
 #' Reads the rendered deck's speaker notes and reports what a listener will
 #' stumble on: symbols and subscripts, abbreviations such as "e.g.", web
-#' addresses, phrases written for the live room ("the room can see",
-#' "click"), and long sentences. Nothing is changed; edit the notes in the
+#' addresses, economics and statistics abbreviations such as "SRAS" (with
+#' the words to say instead), phrases written for the live room ("the room
+#' can see", "click"), and long sentences. Nothing is changed; edit the notes in the
 #' deck's source and render it again. See
 #' `vignette("narration", package = "lecturecast")` for the reasoning.
 #'

@@ -98,20 +98,22 @@ lc_strip_cues <- function(x) trimws(gsub("\\s{2,}", " ", gsub("\\[[A-Za-z][A-Za-
 #' @param script Path to the dialogue script.
 #' @param config Path to a settings file. By default `lecturecast.yml` is
 #'   looked for next to the script and in parent folders.
-#' @param out_dir Folder for the finished files.
+#' @param out_dir Folder for the finished files. Defaults to
+#'   `podcast: out_dir:` in `lecturecast.yml` (relative to that file), else
+#'   the script's folder.
 #' @param cache_dir Folder holding voiced audio for reuse.
 #' @param quiet If `TRUE`, print only errors.
 #' @return Invisibly, a list with the paths of the episode, transcript and
 #'   chapter list, and the episode's duration in seconds.
 #' @export
-build_podcast <- function(script, config = NULL, out_dir = dirname(script), cache_dir = NULL,
+build_podcast <- function(script, config = NULL, out_dir = NULL, cache_dir = NULL,
                           quiet = FALSE) {
   script <- normalizePath(script, mustWork = FALSE)
   turns <- read_dialogue(script)
   cfg <- lecturecast_config(script, config)
   name <- tools::file_path_sans_ext(basename(script))
   title <- attr(turns, "title")
-  out_dir <- lc_dir_create(out_dir)
+  out_dir <- lc_dir_create(lc_out_dir(out_dir, cfg, "podcast", script))
   cache <- lc_cache_dir(cache_dir)
   work <- lc_dir_create(tempfile(paste0("lecturecast-", name, "-")))
   on.exit(unlink(work, recursive = TRUE), add = TRUE)

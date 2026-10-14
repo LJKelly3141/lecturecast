@@ -51,3 +51,19 @@ test_that("card and fragment settings are checked", {
   cfg <- bad("  title_card:", "    title: Week 7")
   expect_equal(cfg$video$title_card$title, "Week 7")
 })
+
+test_that("out_dir in the settings is relative to the settings file and the argument wins", {
+  dir <- withr::local_tempdir()
+  cfg <- lecturecast_config(config = write_config(c("voice:", "  provider: edge", "video:", "  out_dir: build/video",
+                                                    "podcast:", "  out_dir: /tmp/pods"), dir = dir))
+  deck <- file.path(dir, "slides", "deck.html")
+  expect_equal(normalizePath(dirname(lc_out_dir(NULL, cfg, "video", deck)), mustWork = FALSE),
+               file.path(normalizePath(dir), "build"))
+  expect_equal(basename(lc_out_dir(NULL, cfg, "video", deck)), "video")
+  expect_equal(lc_out_dir(NULL, cfg, "podcast", "x/ep.txt"), "/tmp/pods")
+  expect_equal(lc_out_dir("mine", cfg, "video", deck), "mine")
+  plain <- lecturecast_config(config = write_config(c("voice:", "  provider: edge")))
+  expect_equal(lc_out_dir(NULL, plain, "video", deck), dirname(deck))
+  expect_error(lecturecast_config(config = write_config(c("voice:", "  provider: edge", "video:", "  out_dir: 3"))),
+               "out_dir")
+})

@@ -76,6 +76,7 @@ It reports:
 | symbol | `%`, `&`, `=`, arrows, subscripts, `and/or` |
 | abbreviation | e.g., i.e., etc., vs. |
 | link | `https://`, `www.` |
+| acronym | SRAS, AD, MPC, SE, CI, OLS and other economics and statistics abbreviations, with the words to say |
 | room | "the room", "in class", "click", "your neighbor" |
 | long sentence | more than `max_words` words (30 by default) |
 
@@ -88,6 +89,16 @@ subset(issues, issue == "room")
 
 Not every flag needs a change. Some voices read a symbol well, and some long
 sentences flow well aloud. Each flag marks a place worth listening to again.
+
+## With an AI assistant
+
+lecturecast is meant to be used alongside an AI assistant. The package ships
+a skill, `lecture-video`, in `system.file("skills", package = "lecturecast")`.
+It runs `lint_notes()`, drafts a before and after for each flagged sentence
+for you to approve, applies only what you approve to the deck's source, and
+previews the changed slides with `build_video(slides = ...)`. Its table of
+spoken forms (SRAS as "short-run aggregate supply", and so on) is the same
+list `lint_notes()` checks.
 
 ## Sources
 

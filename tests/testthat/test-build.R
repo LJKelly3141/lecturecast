@@ -28,3 +28,13 @@ test_that("deck paths with reserved characters become valid file URLs", {
   expect_match(u, "week%20%233%3F\\.html$")
   expect_match(u, "^file:///")
 })
+
+test_that("a chosen set of slides keeps only their segments", {
+  slides <- fake_slides(c("One.", "", "Three.", "Four."))
+  segs <- lc_segments(slides, list("2" = 3))
+  expect_equal(lc_select_slides(segs, slides, NULL, "d")$slide, 1:4)
+  expect_equal(lc_select_slides(segs, slides, c(3, 4), "d")$id, c("s03", "s04"))
+  expect_error(lc_select_slides(segs, slides, c(4, 7), "d"), "these do not exist: 7")
+  expect_error(lc_select_slides(segs, slides, 1.5, "d"), "whole slide numbers")
+  expect_error(lc_select_slides(segs, slides, 2, "d"), "Every chosen slide is silent")
+})

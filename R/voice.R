@@ -109,6 +109,9 @@ lc_elevenlabs_perform <- function(req, step, out) {
       "429" = "ElevenLabs is rate limiting or out of quota. Wait, or check the account's credits.",
       "Try again later; the build will reuse audio already made.")
     if (grepl("quota|credit", detail, ignore.case = TRUE)) fix <- "The account is out of credits. Add credits, then build again."
+    if (grepl("missing_permissions|missing the permission", detail)) {
+      fix <- "The key works but lacks the permission named above. In ElevenLabs, edit the API key's permissions to allow it."
+    }
     lc_abort(step, paste0("ElevenLabs returned HTTP ", status, if (nzchar(detail)) paste0(": ", detail) else "", "."),
              file = out, fix = fix)
   }
@@ -144,8 +147,7 @@ lc_alignment_chars <- function(al) {
 # Recorded mode: <recorded_dir>/<deck name>/<segment id>.<wav|mp3|m4a|aiff>.
 # Every missing file is listed before anything is built.
 lc_recorded_files <- function(ids, cfg, deck_name) {
-  base <- cfg$voice$recorded_dir
-  if (!grepl("^(/|~|[A-Za-z]:)", base)) base <- file.path(dirname(cfg$path), base)
+  base <- lc_settings_dir(cfg, cfg$voice$recorded_dir)
   dir <- file.path(base, deck_name)
   exts <- c("wav", "mp3", "m4a", "aiff")
   found <- vapply(ids, function(id) {

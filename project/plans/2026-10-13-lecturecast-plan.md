@@ -67,6 +67,20 @@ The ElevenLabs key comes only from the `ELEVENLABS_API_KEY` environment variable
 3. **Podcast.** Dialogue script format, ElevenLabs dialogue, single-voice path, transcript.
 4. **Animated Plotly.** Charts animated in step with the narration, if still wanted after phase 2.
 4b. **Notes written for the ear.** A vignette, "Writing notes for narration": rules for spoken text (contractions, one idea per sentence, symbols and abbreviations written out, no live-room phrases) plus the deck conventions lecturecast reads (`---` fragment steps, quoted button names, silent slides). Sources: ElevenLabs' text-to-speech best-practices page, and The eLearning Coach's voice-over script guide. A `lint_notes(deck)` that reports, and never edits, what reads badly aloud: symbols ("%", subscripts), "e.g." and "etc.", long sentences, room phrases ("the room can see"). Any AI rewrite of notes stays in the `lecture-video` skill, with every change approved by the instructor; the package only checks.
+4c. **Manim scenes.** A `.manim` div on a slide names a scene file and class. Manim renders it locally (uvx, pinned version), and lecturecast plays its sections on quoted cues in the notes, either in a box on the slide or full frame. Explainer videos are decks of full-frame scenes. Data comes from R as files the scene reads. Plan: `project/plans/2026-10-14-phase-4c-manim-plan.md`. Proposal: https://claude.ai/code/artifact/21997ce6-c273-4770-bda7-28e85b9c6f03. Not started.
+    Plan review (Codex, checked 2026-10-14). Plan edits to make before Task 1, diffs to Logan first:
+    1. Fixture `manim.qmd` and the example deck set `title:`, so Quarto adds a title slide with no notes and the build stops (`R/script.R:44-48`). Mark slide 1 silent in both configs; renumber slides, `s02.wav`, and message assertions.
+    2. `lc_frames()` keeps old frames when work_dir is reused; delete the prefix's old PNGs before extracting.
+    3. Vignette says a section starts at its quote; the scheduler waits for the previous run (`R/animate.R:124`). Reword; add a test for an overrunning section.
+    4. Ruling 7 (silent slide = max(scene, silent)) contradicts the code, which adds lead-in and tail (test expects 1.8 s). Recommended: change the ruling to match the code.
+    5. A Manim div inside a fragment shows before its fragment. Abort with a clear message.
+    6. Cache covers only sibling `.py` files and `inputs=`; vignette must say so.
+    7. `lc_manim_cached()` should validate index values (NA or non-numeric seconds, missing names) and give the delete-folder fix.
+    8. Missing mistyped-cue test (Review Focus 2); fake render lacks the real scene's opening section. Add both.
+    9. Task 0 Step 5 `PATH=/usr/bin:/bin` hides uvx; use uvx's full path.
+    10. Minor: unique temp folder per render (`tempfile(tmpdir = cache)`) instead of `<key>.tmp`; handle another build having published the key.
+    Not a defect: Manim CLI facts are unverified by design; Task 0 is the gate. Vignette's "nothing beyond uv" waits on Task 0.
+    Open for Logan: (A) should `video: animations: false` also disable Manim (show the scene's final picture as a still), or control Plotly only? (B) approve making edits 1-10. Also pending: proposal doc edits (pinning bullet, 5a-5c relabeled 4c).
 5. **coursepack link.** `Suggests`, availability check, install skill in coursepack, a place for outputs outside git. coursepack links to the narration vignette and can run `lint_notes()` in its build.
 6. **Public release.** Repo made public; CRAN optional.
 

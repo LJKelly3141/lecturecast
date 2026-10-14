@@ -1,0 +1,8 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^LICENSE\.md$
+^project$
+^\.github$
+^\.claude$
+^\.lecturecast_cache$
+^work$

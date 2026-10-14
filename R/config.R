@@ -64,6 +64,9 @@ lc_config_defaults <- function(raw) {
       card_background = video$card_background %||% "#ffffff",
       card_color = video$card_color %||% "#222222",
       fragments = video$fragments %||% TRUE,
+      animations = video$animations %||% TRUE,
+      animation_pace = video$animation_pace %||% "deck",
+      animation_speed = video$animation_speed %||% 1,
       crossfade = video$crossfade %||% 0.5,
       lead_in = video$lead_in %||% 0.3,
       tail = video$tail %||% 0.5,
@@ -116,8 +119,17 @@ lc_config_validate <- function(cfg, path) {
       lc_abort(step, paste0("video: ", k, ": must be a hex colour such as \"#ffffff\"."), file = path)
     }
   }
-  if (!is.logical(cfg$video$fragments) || length(cfg$video$fragments) != 1 || is.na(cfg$video$fragments)) {
-    lc_abort(step, "video: fragments: must be true or false.", file = path)
+  for (k in c("fragments", "animations")) {
+    if (!is.logical(cfg$video[[k]]) || length(cfg$video[[k]]) != 1 || is.na(cfg$video[[k]])) {
+      lc_abort(step, paste0("video: ", k, ": must be true or false."), file = path)
+    }
+  }
+  if (!cfg$video$animation_pace %in% c("deck", "sentence")) {
+    lc_abort(step, "video: animation_pace: must be deck or sentence.", file = path)
+  }
+  sp <- cfg$video$animation_speed
+  if (!is.numeric(sp) || length(sp) != 1 || is.na(sp) || sp <= 0) {
+    lc_abort(step, "video: animation_speed: must be a number above 0 (1 = the deck's own speed).", file = path)
   }
   if (!is.numeric(cfg$podcast$gap) || length(cfg$podcast$gap) != 1 || cfg$podcast$gap < 0) {
     lc_abort(step, "podcast: gap: must be a number of seconds.", file = path)

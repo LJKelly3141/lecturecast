@@ -98,7 +98,13 @@ lc_read_slides <- function(b, deck) {
         notes_html: Reveal.getSlideNotes(s) || '',
         fragments: Array.from(s.querySelectorAll('.fragment'))
           .map(f => f.hasAttribute('data-fragment-index') ? Number(f.getAttribute('data-fragment-index')) : null),
-        silent: s.getAttribute('data-silent')
+        silent: s.getAttribute('data-silent'),
+        buttons: Array.from(s.querySelectorAll('.js-plotly-plot')).flatMap((gd, pi) =>
+          ((gd.layout && gd.layout.updatemenus) || []).flatMap((m, mi) =>
+            (m.buttons || []).map((bt, bi) => ({
+              plot: pi, menu: mi, button: bi, label: String(bt.label || ''),
+              method: bt.method || 'restyle'
+            }))))
       };
     }));
   })()"
@@ -113,8 +119,21 @@ lc_read_slides <- function(b, deck) {
     notes_html = vapply(x, function(s) s$notes_html, character(1)),
     n_fragments = vapply(x, function(s) lc_fragment_steps(s$fragments), integer(1)),
     silent = vapply(x, function(s) if (is.null(s$silent)) NA_real_ else suppressWarnings(as.numeric(s$silent)), numeric(1)),
+    buttons = I(lapply(x, function(s) lc_buttons_df(s$buttons))),
     stringsAsFactors = FALSE
   )
+}
+
+lc_buttons_df <- function(b) {
+  if (length(b) == 0) {
+    return(data.frame(plot = integer(0), menu = integer(0), button = integer(0),
+                      label = character(0), method = character(0), stringsAsFactors = FALSE))
+  }
+  data.frame(plot = vapply(b, function(x) as.integer(x$plot), 0L),
+             menu = vapply(b, function(x) as.integer(x$menu), 0L),
+             button = vapply(b, function(x) as.integer(x$button), 0L),
+             label = vapply(b, function(x) x$label, ""),
+             method = vapply(b, function(x) x$method, ""), stringsAsFactors = FALSE)
 }
 
 # Number of fragment steps on a slide. Fragments sharing an index reveal

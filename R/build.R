@@ -51,10 +51,27 @@ build_video <- function(deck, config = NULL, out_dir = dirname(deck), work_dir =
 
   lc_prepare_capture(b, deck)
   segs$png <- file.path(work, "png", paste0(segs$id, ".png"))
+  # Each segment's still, then any animations its notes cue, in narration
+  # order, so a later segment on the same slide starts from where the
+  # chart was left.
+  events <- vector("list", nrow(segs))
+  captured <- vector("list", nrow(segs))
+  played <- list()
   for (i in seq_len(nrow(segs))) {
     lc_goto(b, segs$h[i], segs$v[i], segs$fragment[i], deck)
     lc_screenshot(b, segs$png[i], wh[1], wh[2], deck)
+    if (!isTRUE(cfg$video$animations) || !is.na(segs$silent[i])) next
+    key <- as.character(segs$slide[i])
+    ev <- lc_segment_events(segs$text[i], slides$buttons[[segs$slide[i]]], played[[key]] %||% character(0))
+    if (nrow(ev) == 0) next
+    played[[key]] <- c(played[[key]], lc_label_key(ev$label))
+    events[[i]] <- ev
+    captured[[i]] <- lapply(seq_len(nrow(ev)), function(k) {
+      lc_capture_event(b, ev[k, ], file.path(work, "png", sprintf("%s-anim%d", segs$id[i], k)), wh, deck)
+    })
   }
+  n_anim <- sum(vapply(events, function(e) if (is.null(e)) 0L else nrow(e), 0L))
+  if (n_anim) lc_done(quiet, sprintf("Captured %d animations cued in the notes.", n_anim))
   cards <- lc_capture_cards(b, cfg, title, work, wh, deck)
   try(b$close(), silent = TRUE)
   chrome_open <- FALSE
@@ -80,13 +97,24 @@ build_video <- function(deck, config = NULL, out_dir = dirname(deck), work_dir =
   # title and end cards.
   segs$clip <- file.path(work, "clips", paste0(segs$id, ".mp4"))
   segs$clip_seconds <- NA_real_
+  segs$audio_seconds <- NA_real_
   for (i in seq_len(nrow(segs))) {
-    segs$clip_seconds[i] <- if (is.na(segs$silent[i])) {
+    if (is.na(segs$silent[i])) segs$audio_seconds[i] <- lc_duration(segs$audio[i], "assemble")
+    segs$clip_seconds[i] <- if (!is.null(events[[i]])) {
+      sched <- lc_animation_schedule(segs$png[i], events[[i]], captured[[i]], segs$text[i], timings[[i]],
+                                     segs$audio_seconds[i], cfg)
+      lc_animated_clip(sched, segs$audio[i], segs$clip[i], cfg)
+    } else if (is.na(segs$silent[i])) {
       lc_still_clip(segs$png[i], segs$clip[i], cfg, audio = segs$audio[i])
     } else {
       lc_still_clip(segs$png[i], segs$clip[i], cfg, seconds = segs$silent[i])
     }
   }
+  # A fade out of an animated clip starts from its last frame.
+  segs$png_out <- vapply(seq_len(nrow(segs)), function(i) {
+    cap <- captured[[i]]
+    if (is.null(cap)) segs$png[i] else { last <- cap[[length(cap)]]$files; last[length(last)] }
+  }, "")
   timeline <- lc_timeline(segs, cards, cfg, work)
 
   # Join, caption, transcript. Written under temporary names, renamed once
@@ -114,16 +142,16 @@ build_video <- function(deck, config = NULL, out_dir = dirname(deck), work_dir =
 # The order of clips in the video, with fades between pictures. Returns a
 # data frame of id, clip and start (seconds from the start of the video).
 lc_timeline <- function(segs, cards, cfg, work) {
-  items <- data.frame(id = segs$id, png = segs$png, clip = segs$clip,
+  items <- data.frame(id = segs$id, png = segs$png, png_out = segs$png_out %||% segs$png, clip = segs$clip,
                       seconds = segs$clip_seconds, stringsAsFactors = FALSE)
   if (!is.null(cards$title)) {
     d <- lc_still_clip(cards$title, file.path(work, "clips", "title-card.mp4"), cfg, seconds = cfg$video$card_seconds)
-    items <- rbind(data.frame(id = "title-card", png = cards$title, clip = file.path(work, "clips", "title-card.mp4"),
+    items <- rbind(data.frame(id = "title-card", png = cards$title, png_out = cards$title, clip = file.path(work, "clips", "title-card.mp4"),
                               seconds = d), items)
   }
   if (!is.null(cards$end)) {
     d <- lc_still_clip(cards$end, file.path(work, "clips", "end-card.mp4"), cfg, seconds = cfg$video$card_seconds)
-    items <- rbind(items, data.frame(id = "end-card", png = cards$end, clip = file.path(work, "clips", "end-card.mp4"),
+    items <- rbind(items, data.frame(id = "end-card", png = cards$end, png_out = cards$end, clip = file.path(work, "clips", "end-card.mp4"),
                                      seconds = d))
   }
   fade <- cfg$video$crossfade
@@ -131,8 +159,9 @@ lc_timeline <- function(segs, cards, cfg, work) {
     rows <- list(items[1, ])
     for (i in 2:nrow(items)) {
       tr <- file.path(work, "clips", sprintf("fade-%03d.mp4", i - 1))
-      d <- lc_fade_clip(items$png[i - 1], items$png[i], tr, cfg)
-      rows[[length(rows) + 1]] <- data.frame(id = paste0("fade-", i - 1), png = NA_character_, clip = tr, seconds = d)
+      d <- lc_fade_clip(items$png_out[i - 1], items$png[i], tr, cfg)
+      rows[[length(rows) + 1]] <- data.frame(id = paste0("fade-", i - 1), png = NA_character_, png_out = NA_character_,
+                                             clip = tr, seconds = d)
       rows[[length(rows) + 1]] <- items[i, ]
     }
     items <- do.call(rbind, rows)
@@ -239,7 +268,8 @@ lc_video_cues <- function(segs, timings, cfg) {
   starts <- segs$start %||% c(0, cumsum(segs$clip_seconds))[seq_len(nrow(segs))]
   out <- list()
   for (i in which(is.na(segs$silent))) {
-    a_dur <- segs$clip_seconds[i] - cfg$video$lead_in - cfg$video$tail
+    # The narration's own length: an animation can make the clip longer.
+    a_dur <- segs$audio_seconds[i] %||% (segs$clip_seconds[i] - cfg$video$lead_in - cfg$video$tail)
     cues <- lc_segment_cues(segs$text[i], timings[[i]], a_dur)
     if (is.null(cues)) next
     off <- starts[i] + cfg$video$lead_in

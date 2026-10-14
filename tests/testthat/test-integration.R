@@ -49,3 +49,32 @@ test_that("a deck with an unmarked slide without notes stops before voicing", {
   expect_error(build_video(file.path(dir, "fragments.html"), config = cfg, out_dir = dir, quiet = TRUE),
                "1 \\(Fixture deck\\)")
 })
+
+test_that("a Plotly button quoted in the notes plays in the video", {
+  skip_on_cran()
+  skip_on_ci()
+  skip_if_no_ffmpeg()
+  skip_if(!nzchar(Sys.which("quarto")), "Quarto not installed")
+  skip_if(!nzchar(lc_find_chrome()), "Chrome not found")
+  skip_if_not_installed("plotly")
+
+  dir <- withr::local_tempdir()
+  file.copy(test_path("fixtures", "animation.qmd"), dir)
+  processx::run("quarto", c("render", "animation.qmd"), wd = dir)
+  rec <- file.path(dir, "audio", "animation")
+  dir.create(rec, recursive = TRUE)
+  processx::run("ffmpeg", c("-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=duration=3",
+                            file.path(rec, "s03.wav")))
+  cfg <- write_config(c("voice:", "  provider: recorded", "  recorded_dir: audio",
+                        "video:", "  resolution: 720p", "  silent:", "    \"1\": 1"), dir = dir)
+  work <- file.path(dir, "work")
+  r <- build_video(file.path(dir, "animation.html"), config = cfg, out_dir = file.path(dir, "out"),
+                   work_dir = work, quiet = TRUE)
+  frames <- list.files(file.path(work, "png"), pattern = "^s03-anim")
+  # "Move up" is quoted twice but plays once, with its three frames.
+  expect_equal(length(frames), 3)
+  first <- file.path(work, "png", "s03.png")
+  last <- file.path(work, "png", frames[3])
+  expect_false(identical(unname(tools::md5sum(first)), unname(tools::md5sum(last))))
+  expect_true(file.exists(r$video))
+})

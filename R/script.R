@@ -108,25 +108,76 @@ lc_split_fragment_notes <- function(s, deck) {
 #' with its speaker notes, as they will be voiced. Use it to review every word
 #' before building.
 #'
-#' @param deck Path to the rendered reveal.js HTML file.
+#' @param deck Path to the deck's `.qmd`, or to its rendered reveal.js `.html`.
 #' @return A data frame with columns `index`, `title`, `notes`, `n_fragments`
 #'   and `silent`.
 #' @export
 lecture_script <- function(deck) {
-  lc_check_deck(deck)
+  deck <- lc_check_deck(deck)
   b <- lc_open_deck(deck, 1280L, 720L)
   on.exit(try(b$close(), silent = TRUE), add = TRUE)
   slides <- lc_read_slides(b, deck)
   slides[, c("index", "title", "notes", "n_fragments", "silent")]
 }
 
+# The rendered deck to read. A .html path is used as given. A .qmd path is
+# mapped to its render: the nearest _quarto.yml above it sets the project
+# root and project: output-dir:, so <root>/<dir>/<deck>.qmd renders to
+# <root>/<output-dir>/<dir>/<deck>.html, or beside the .qmd with no
+# output-dir. lecturecast never renders; a missing or stale render stops.
 lc_check_deck <- function(deck) {
+  step <- "open deck"
   if (!is.character(deck) || length(deck) != 1 || !file.exists(deck)) {
-    lc_abort("open deck", "Deck file not found.", file = as.character(deck)[1])
+    lc_abort(step, "Deck file not found.", file = as.character(deck)[1])
   }
+  if (grepl("\\.qmd$", deck, ignore.case = TRUE)) return(lc_rendered_deck(deck))
   if (!grepl("\\.html?$", deck, ignore.case = TRUE)) {
-    lc_abort("open deck", "lecturecast needs the rendered deck (.html), not the source.", file = deck,
-             fix = "Render the deck with quarto render, then pass the .html file.")
+    lc_abort(step, "lecturecast needs a deck's .qmd or its rendered .html.", file = deck)
   }
-  invisible(TRUE)
+  normalizePath(deck)
+}
+
+lc_rendered_deck <- function(qmd) {
+  step <- "open deck"
+  qmd <- normalizePath(qmd)
+  root <- lc_quarto_root(dirname(qmd))
+  name <- paste0(tools::file_path_sans_ext(basename(qmd)), ".html")
+  out <- NULL
+  if (!is.null(root)) {
+    proj <- tryCatch(yaml::read_yaml(file.path(root, "_quarto.yml")),
+                     error = function(e) lc_abort(step, paste0("_quarto.yml is not valid YAML: ", conditionMessage(e)),
+                                                  file = file.path(root, "_quarto.yml")))
+    out <- proj$project$`output-dir`
+  }
+  html <- if (is.null(out)) {
+    file.path(dirname(qmd), name)
+  } else {
+    rel <- substring(dirname(qmd), nchar(root) + 2)
+    base <- if (grepl("^(/|~|[A-Za-z]:)", out)) path.expand(out) else file.path(root, out)
+    if (nzchar(rel)) file.path(base, rel, name) else file.path(base, name)
+  }
+  if (!file.exists(html)) {
+    fix <- "Render it first with quarto render."
+    rel <- if (is.null(root)) "" else substring(dirname(qmd), nchar(root) + 2)
+    if (!is.null(root) && !is.null(proj$project$render) && nzchar(rel)) {
+      top <- strsplit(rel, "/", fixed = TRUE)[[1]][1]
+      fix <- sprintf("Render it first with quarto render. The project renders only the files listed under project: render: in _quarto.yml, so add \"%s/**/*.qmd\" there if the deck is not covered.", top)
+    }
+    lc_abort(step, "The deck has not been rendered.", file = html, fix = fix)
+  }
+  if (file.mtime(html) < file.mtime(qmd)) {
+    lc_abort(step, "The rendered deck is older than its .qmd, so it would not match the notes you edited.",
+             file = html, fix = paste0("Render it again: quarto render ", qmd))
+  }
+  normalizePath(html)
+}
+
+# The nearest folder at or above `dir` holding _quarto.yml.
+lc_quarto_root <- function(dir) {
+  repeat {
+    if (file.exists(file.path(dir, "_quarto.yml"))) return(dir)
+    parent <- dirname(dir)
+    if (identical(parent, dir)) return(NULL)
+    dir <- parent
+  }
 }

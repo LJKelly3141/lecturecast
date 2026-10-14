@@ -16,9 +16,11 @@ this skill is where drafting happens, and the instructor decides.
    source until the instructor says yes to that change. Show before and
    after for each item.
 2. **Edit the source, not the render.** Notes live in the deck's `.qmd`
-   (`::: notes` blocks). lecturecast reads the rendered `.html`. After
-   approved edits, the instructor (or you, if asked) re-renders with
-   `quarto render`.
+   (`::: notes` blocks). Every lecturecast function takes the `.qmd` and
+   reads its rendered `.html` (found through the project's `_quarto.yml`
+   output-dir). lecturecast never renders: if the render is missing or
+   older than the `.qmd`, it stops and says so. After approved edits, the
+   instructor (or you, if asked) re-renders with `quarto render`.
 3. **The deck may belong to another project.** If the `.qmd` is outside the
    current workspace, write the proposals to a file in the current project
    and ask before touching the deck.
@@ -37,9 +39,12 @@ this skill is where drafting happens, and the instructor decides.
 
 ## Steps
 
-1. **Read the script.** `lecturecast::lecture_script("<deck>.html")` shows
+0. **Settings.** If the project has no `lecturecast.yml`, offer
+   `lecturecast::use_lecturecast()`: Edge voice en-US-AndrewNeural, videos
+   to `build/video/`. It never overwrites an existing file.
+1. **Read the script.** `lecturecast::lecture_script("<deck>.qmd")` shows
    every word as it will be voiced.
-2. **Lint.** `lecturecast::lint_notes("<deck>.html")` returns one row per
+2. **Lint.** `lecturecast::lint_notes("<deck>.qmd")` returns one row per
    issue: `slide`, `title`, `issue`, `found`, `sentence`, `advice`.
    Issues: `symbol`, `abbreviation`, `link`, `acronym`, `room`,
    `long sentence`.
@@ -54,9 +59,9 @@ this skill is where drafting happens, and the instructor decides.
 5. **Apply only the approved items** to the `.qmd`, render, run
    `lint_notes()` again and report what is left.
 6. **Preview** the changed slides only:
-   `build_video("<deck>.html", slides = c(...))`. Unchanged slides come
+   `build_video("<deck>.qmd", slides = c(...))`. Unchanged slides come
    from the cache.
-7. **Build** the full video with `build_video("<deck>.html")`. Report the
+7. **Build** the full video with `build_video("<deck>.qmd")`. Report the
    output paths and length.
 
 ## Spoken forms

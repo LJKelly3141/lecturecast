@@ -59,11 +59,53 @@ test_that("notes are tidied into paragraphs", {
   expect_equal(lc_clean_notes(""), "")
 })
 
-test_that("only rendered decks are accepted", {
-  f <- withr::local_tempfile(fileext = ".qmd")
+test_that("a deck must be a .qmd or a rendered .html", {
+  f <- withr::local_tempfile(fileext = ".md")
   file.create(f)
-  expect_error(lc_check_deck(f), "rendered deck")
+  expect_error(lc_check_deck(f), "needs a deck's .qmd or its rendered .html")
   expect_error(lc_check_deck("no/such/file.html"), "not found")
+})
+
+make_project <- function(quarto = c("project:", "  type: default", "  output-dir: docs"),
+                         env = parent.frame()) {
+  root <- withr::local_tempdir(.local_envir = env)
+  if (length(quarto)) writeLines(quarto, file.path(root, "_quarto.yml"))
+  dir.create(file.path(root, "slides", "week1"), recursive = TRUE)
+  qmd <- file.path(root, "slides", "week1", "deck.qmd")
+  writeLines("---\ntitle: x\n---", qmd)
+  list(root = normalizePath(root), qmd = qmd)
+}
+
+test_that("a .qmd maps to its render under the project's output-dir", {
+  p <- make_project()
+  html <- file.path(p$root, "docs", "slides", "week1", "deck.html")
+  dir.create(dirname(html), recursive = TRUE)
+  file.create(html)
+  Sys.setFileTime(p$qmd, Sys.time() - 60)
+  expect_equal(lc_check_deck(p$qmd), normalizePath(html))
+})
+
+test_that("with no output-dir the render sits beside the .qmd", {
+  p <- make_project(c("project:", "  type: default"))
+  html <- sub("qmd$", "html", p$qmd)
+  file.create(html)
+  Sys.setFileTime(p$qmd, Sys.time() - 60)
+  expect_equal(lc_check_deck(p$qmd), normalizePath(html))
+  q <- make_project(character(0))
+  file.create(sub("qmd$", "html", q$qmd))
+  Sys.setFileTime(q$qmd, Sys.time() - 60)
+  expect_match(lc_check_deck(q$qmd), "deck\\.html$")
+})
+
+test_that("a missing or stale render stops with the fix", {
+  p <- make_project(c("project:", "  output-dir: docs", "  render:", "    - index.qmd"))
+  expect_error(lc_check_deck(p$qmd), "has not been rendered")
+  expect_error(lc_check_deck(p$qmd), "slides/\\*\\*/\\*.qmd")
+  html <- file.path(p$root, "docs", "slides", "week1", "deck.html")
+  dir.create(dirname(html), recursive = TRUE)
+  file.create(html)
+  Sys.setFileTime(html, Sys.time() - 60)
+  expect_error(lc_check_deck(p$qmd), "older than its .qmd")
 })
 
 test_that("a deck with nothing to voice stops at the script step", {

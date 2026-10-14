@@ -7,7 +7,7 @@
 lecture_script(deck)
 }
 \arguments{
-\item{deck}{Path to the rendered reveal.js HTML file.}
+\item{deck}{Path to the deck's \code{.qmd}, or to its rendered reveal.js \code{.html}.}
 }
 \value{
 A data frame with columns \code{index}, \code{title}, \code{notes}, \code{n_fragments}

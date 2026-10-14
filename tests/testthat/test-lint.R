@@ -58,6 +58,7 @@ test_that("lint_notes reads a real deck", {
   out <- lint_notes(file.path(dir, "fragments.html"), quiet = TRUE)
   expect_s3_class(out, "data.frame")
   expect_named(out, c("slide", "title", "issue", "found", "sentence", "advice"))
+  expect_equal(lint_notes(file.path(dir, "fragments.qmd"), quiet = TRUE), out)
 })
 
 test_that("economics and statistics abbreviations come with the words to say", {

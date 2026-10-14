@@ -105,14 +105,16 @@ lc_lint_slides <- function(slides, max_words = 30) {
 #' deck's source and render it again. See
 #' `vignette("narration", package = "lecturecast")` for the reasoning.
 #'
-#' @param deck Path to the rendered reveal.js HTML file.
+#' @param deck Path to the deck's `.qmd`, or to its rendered reveal.js `.html`.
+#'   A `.qmd` is mapped to its render using the project's `_quarto.yml`;
+#'   lecturecast never renders, so a missing or out-of-date render stops.
 #' @param max_words Sentences longer than this many words are reported.
 #' @param quiet If `TRUE`, print nothing.
 #' @return Invisibly, a data frame with one row per issue and columns `slide`,
 #'   `title`, `issue`, `found`, `sentence` and `advice`.
 #' @export
 lint_notes <- function(deck, max_words = 30, quiet = FALSE) {
-  lc_check_deck(deck)
+  deck <- lc_check_deck(deck)
   if (!is.numeric(max_words) || length(max_words) != 1 || is.na(max_words) || max_words < 1) {
     lc_abort("lint notes", "max_words must be a positive number.")
   }

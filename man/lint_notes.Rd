@@ -7,7 +7,9 @@
 lint_notes(deck, max_words = 30, quiet = FALSE)
 }
 \arguments{
-\item{deck}{Path to the rendered reveal.js HTML file.}
+\item{deck}{Path to the deck's \code{.qmd}, or to its rendered reveal.js \code{.html}.
+A \code{.qmd} is mapped to its render using the project's \verb{_quarto.yml};
+lecturecast never renders, so a missing or out-of-date render stops.}
 
 \item{max_words}{Sentences longer than this many words are reported.}
 

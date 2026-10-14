@@ -6,7 +6,9 @@
 #' output, and any failure stops the build with the step, the file and a fix.
 #' Finished files are only written once every check has passed.
 #'
-#' @param deck Path to the rendered reveal.js HTML file.
+#' @param deck Path to the deck's `.qmd`, or to its rendered reveal.js `.html`.
+#'   A `.qmd` is mapped to its render using the project's `_quarto.yml`;
+#'   lecturecast never renders, so a missing or out-of-date render stops.
 #' @param config Path to a settings file. By default `lecturecast.yml` is
 #'   looked for next to the deck and in parent folders up to the course root.
 #' @param out_dir Folder for the finished files. Defaults to `video: out_dir:`
@@ -25,9 +27,9 @@
 #' @export
 build_video <- function(deck, config = NULL, out_dir = NULL, work_dir = NULL,
                         cache_dir = NULL, slides = NULL, quiet = FALSE) {
-  lc_check_deck(deck)
-  deck <- normalizePath(deck)
-  cfg <- lecturecast_config(deck, config)
+  input <- deck
+  deck <- lc_check_deck(deck)
+  cfg <- lecturecast_config(input, config)
   name <- tools::file_path_sans_ext(basename(deck))
   wh <- lc_resolutions[[cfg$video$resolution]]
   lc_say(quiet, "Settings: ", cfg$path, " (voice: ", cfg$voice$provider, ")")
@@ -36,7 +38,7 @@ build_video <- function(deck, config = NULL, out_dir = NULL, work_dir = NULL,
   work <- lc_dir_create(work_dir %||% tempfile(paste0("lecturecast-", name, "-")))
   if (!keep_work) on.exit(if (isTRUE(ok)) unlink(work, recursive = TRUE), add = TRUE)
   ok <- FALSE
-  out_dir <- lc_dir_create(lc_out_dir(out_dir, cfg, "video", deck))
+  out_dir <- lc_dir_create(lc_out_dir(out_dir, cfg, "video", input))
   for (d in c("png", "audio", "clips")) lc_dir_create(file.path(work, d))
   cache <- lc_cache_dir(cache_dir)
 

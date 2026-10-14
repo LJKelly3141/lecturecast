@@ -1,0 +1,30 @@
+test_that("finished files move into place together", {
+  dir <- withr::local_tempdir()
+  final <- file.path(dir, c("a.mp4", "a.vtt"))
+  part <- file.path(dir, c("a.partial.mp4", "a.partial.vtt"))
+  for (f in final) writeLines("old", f)
+  for (f in part) writeLines("new", f)
+  lc_publish(part, final)
+  expect_equal(unname(vapply(final, readLines, "")), c("new", "new"))
+  expect_false(any(file.exists(part)))
+  expect_false(any(file.exists(paste0(final, ".old"))))
+})
+
+test_that("a failed move restores the previous version", {
+  dir <- withr::local_tempdir()
+  final <- file.path(dir, c("a.mp4", "a.vtt"))
+  part <- file.path(dir, c("a.partial.mp4", "missing.partial.vtt"))
+  for (f in final) writeLines("old", f)
+  writeLines("new", part[1])
+  expect_error(suppressWarnings(lc_publish(part, final)), "previous version is restored")
+  expect_equal(unname(vapply(final, readLines, "")), c("old", "old"))
+})
+
+test_that("deck paths with reserved characters become valid file URLs", {
+  dir <- withr::local_tempdir()
+  f <- file.path(dir, "week #3?.html")
+  file.create(f)
+  u <- lc_file_url(f)
+  expect_match(u, "week%20%233%3F\\.html$")
+  expect_match(u, "^file:///")
+})

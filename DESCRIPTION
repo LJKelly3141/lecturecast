@@ -12,9 +12,16 @@ License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 Imports:
-    cli
-Suggests:
     chromote,
+    cli,
+    httr2,
+    jsonlite,
+    processx,
+    stats,
+    tools,
+    utils,
+    yaml
+Suggests:
     testthat (>= 3.0.0),
     withr
 Config/testthat/edition: 3

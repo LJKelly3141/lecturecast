@@ -69,9 +69,6 @@ lc_find_chrome <- function() {
 
 # edge-tts on PATH, else run through `uvx` when uv is installed.
 lc_find_edge_tts <- function() {
-  path <- lc_find_tool("edge-tts")
-  if (nzchar(path)) return(path)
-  uvx <- lc_find_tool("uvx")
-  if (nzchar(uvx)) return(paste(uvx, "edge-tts"))
-  ""
+  cmd <- tryCatch(lc_edge_command(), lecturecast_error = function(e) "")
+  paste(cmd, collapse = " ")
 }

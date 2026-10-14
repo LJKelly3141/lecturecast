@@ -36,7 +36,7 @@ test_that("edge-tts falls back to uvx", {
   local_mocked_bindings(
     lc_find_tool = function(tool) if (tool == "uvx") "/fake/uvx" else ""
   )
-  expect_equal(lc_find_edge_tts(), "/fake/uvx edge-tts")
+  expect_equal(lc_find_edge_tts(), paste0("/fake/uvx edge-tts@", lc_edge_version))
 })
 
 test_that("an option overrides the PATH lookup", {

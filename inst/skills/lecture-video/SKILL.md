@@ -1,9 +1,15 @@
 ---
 name: lecture-video
-description: Review and revise a Quarto reveal.js deck's speaker notes so they read well aloud, then build the narrated lecture video with lecturecast. Use when the instructor says "review the notes for video", "check my speaker notes", "make the notes sound right for narration", "lint the notes", "build the lecture video", or asks to turn a deck into a narrated video.
+description: Write, review and revise a Quarto reveal.js deck's speaker notes so they read well aloud, then build the narrated lecture video with lecturecast. Run it as the first step whenever slides are being made or their speaker notes drafted, so notes are written for the ear from the start. Use when the instructor says "make slides", "draft the speaker notes", "review the notes for video", "check my speaker notes", "make the notes sound right for narration", "lint the notes", "build the lecture video", or asks to turn a deck into a narrated video.
 ---
 
 # Lecture video: notes review, then build
+
+**Run this first when making slides.** Whenever a deck is being written or
+its speaker notes drafted, apply the rules and spoken forms below while
+drafting, then run `lint_notes()` on the first render. Notes written for
+the ear serve the classroom too, and the deck is ready for video without a
+second pass.
 
 lecturecast voices each slide's speaker notes word for word. This skill gets
 the notes ready for a listener, with the instructor approving every change,

@@ -1,0 +1,12 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.tar.gz
+*.Rcheck/
+.DS_Store
+.claude/settings.local.json
+*.mp3
+*.mp4
+*.wav
+.lecturecast_cache/

@@ -1,0 +1,98 @@
+---
+title: "Writing notes for narration"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Writing notes for narration}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+A lecture video uses each slide's speaker notes as its script, word for word.
+Notes written to prompt you in a live class often sound wrong when a voice
+reads them out to someone watching alone. This guide covers how to write
+notes for the ear, and how lecturecast reads them.
+
+## Write for someone listening
+
+A listener cannot reread a sentence or glance back at a paragraph. Guides to
+voice-over and broadcast writing agree on a few rules:
+
+- **Write the way you talk.** Use contractions and everyday words. Drop
+  written connectives such as "thus" and "moreover".
+- **One idea per sentence.** If a sentence carries two ideas, split it. Vary
+  the length so the narration does not sound clipped.
+- **Picture one listener.** Talk to a single student, not to a room.
+- **Say symbols and abbreviations in full.** Write "for example" rather than
+  "e.g.", "percent" rather than "%", and "A D one" rather than "AD₁". Voice
+  models guess at symbols, and each provider guesses differently.
+- **Leave web addresses on the slide.** Name the page in the narration and
+  put the link where students can click it.
+- **Read it aloud.** Rewrite any sentence that makes you stumble or run out of
+  breath.
+
+## Leave the live room behind
+
+Notes written for class assume a room: "so the room can see", "click the
+button", "turn to your neighbor". In the video nobody is in the room, and the
+charts play by themselves. Describe what happens instead: "Watch what happens
+when aggregate demand falls."
+
+## How lecturecast reads the notes
+
+- **One slide, one segment.** The notes for a slide are voiced while that
+  slide is on screen.
+- **Fragments.** On a slide with fragments, put a line holding only `---`
+  before each fragment's narration. The notes then need one part more than
+  the slide has fragments: the first part plays before any fragment appears.
+- **Animated charts.** A phrase in quotes that matches a button label on the
+  slide, such as "AD falls", plays that button when the narration reaches it.
+  Only the first mention on a slide plays. A quoted phrase that matches no
+  button is read as ordinary text.
+- **Silent slides.** A slide with no notes stops the build, unless it is marked
+  silent with a length in seconds, either with `data-silent` on the slide or
+  under `video: silent:` in `lecturecast.yml`.
+
+`lecture_script()` shows every word as it will be voiced.
+
+## Checking the notes
+
+`lint_notes()` reads the rendered deck and lists what a listener is likely to
+stumble on. It changes nothing; edit the notes in the deck's source and render
+again.
+
+```{r}
+library(lecturecast)
+issues <- lint_notes("slides/keynesian_slides.html")
+```
+
+It reports:
+
+| Issue | Examples |
+|---|---|
+| symbol | `%`, `&`, `=`, arrows, subscripts, `and/or` |
+| abbreviation | e.g., i.e., etc., vs. |
+| link | `https://`, `www.` |
+| room | "the room", "in class", "click", "your neighbor" |
+| long sentence | more than `max_words` words (30 by default) |
+
+The result is a data frame with the slide, the sentence and advice for each
+issue, so it can be filtered or saved:
+
+```{r}
+subset(issues, issue == "room")
+```
+
+Not every flag needs a change. Some voices read a symbol well, and some long
+sentences flow well aloud. Each flag marks a place worth listening to again.
+
+## Sources
+
+- ElevenLabs, "Best practices" for text to speech, in the ElevenLabs
+  documentation: <https://elevenlabs.io/docs/overview/capabilities/text-to-speech/best-practices>
+- "The art of writing great voice over scripts", The eLearning Coach: <https://theelearningcoach.com/elearning_design/the-art-of-writing-great-voice-over-scripts/>
+- "How to write for the human ear", The MX Group:
+  <https://themxgroup.com/resources/how-to-write-for-human-ear>

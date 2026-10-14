@@ -41,6 +41,18 @@ button", "turn to your neighbor". In the video nobody is in the room, and the
 charts play by themselves. Describe what happens instead: "Watch what happens
 when aggregate demand falls."
 
+## Show, don't just tell
+
+A video holds attention when the picture moves with the voice. Narrate every
+slide, so there is no dead air: give section slides a one-sentence
+transition, and give the title slide a short intro with
+`title-slide-attributes: data-notes:` in the deck's YAML. Keep the agenda
+slide short. On a slide you explain at length, reveal the points one at a
+time as you reach them, or play a chart step, so the screen changes at
+least every half minute. When one button plays a whole multi-step story,
+give each step its own button that jumps to that step, and quote it as you
+explain the step, so the viewer sees the whole and then each part.
+
 ## How lecturecast reads the notes
 
 - **One slide, one segment.** The notes for a slide are voiced while that
@@ -79,6 +91,10 @@ It reports:
 | acronym | SRAS, AD, MPC, SE, CI, OLS and other economics and statistics abbreviations, with the words to say |
 | room | "the room", "in class", "click", "your neighbor" |
 | long sentence | more than `max_words` words (30 by default) |
+| dead air | a slide with nothing said, including the title slide |
+| animation not cued | a chart button the notes never quote, so it never plays |
+| static slide | narration running longer than `max_still` seconds (30 by default) with nothing changing on screen |
+| static after animation | narration walking through an animation's steps after it has finished, while the chart sits at its end |
 
 The result is a data frame with the slide, the sentence and advice for each
 issue, so it can be filtered or saved:

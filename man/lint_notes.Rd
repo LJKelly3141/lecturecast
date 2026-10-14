@@ -4,7 +4,7 @@
 \alias{lint_notes}
 \title{Find speaker notes that will read badly aloud}
 \usage{
-lint_notes(deck, max_words = 30, quiet = FALSE)
+lint_notes(deck, max_words = 30, max_still = 30, quiet = FALSE)
 }
 \arguments{
 \item{deck}{Path to the deck's \code{.qmd}, or to its rendered reveal.js \code{.html}.
@@ -12,6 +12,10 @@ A \code{.qmd} is mapped to its render using the project's \verb{_quarto.yml};
 lecturecast never renders, so a missing or out-of-date render stops.}
 
 \item{max_words}{Sentences longer than this many words are reported.}
+
+\item{max_still}{Report a slide when its picture would sit unchanged for
+longer than this many seconds of narration, estimated from the word
+count. Fragment steps and cued chart buttons count as changes.}
 
 \item{quiet}{If \code{TRUE}, print nothing.}
 }
@@ -24,7 +28,10 @@ Reads the rendered deck's speaker notes and reports what a listener will
 stumble on: symbols and subscripts, abbreviations such as "e.g.", web
 addresses, economics and statistics abbreviations such as "SRAS" (with
 the words to say instead), phrases written for the live room ("the room
-can see", "click"), and long sentences. Nothing is changed; edit the notes in the
+can see", "click"), long sentences, and the pacing of the picture: slides
+with no narration (dead air), chart buttons the notes never play,
+stretches of narration over a slide that does not change, and narration
+that walks through an animation's steps after it has finished playing. Nothing is changed; edit the notes in the
 deck's source and render it again. See
 \code{vignette("narration", package = "lecturecast")} for the reasoning.
 }

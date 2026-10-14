@@ -55,8 +55,57 @@ lc_spoken_pattern <- function() {
   paste0("(?<![\\w.])(", paste(keys, collapse = "|"), ")s?(?![\\w])")
 }
 
-# One row per issue in a set of slides from lc_read_slides().
-lc_lint_slides <- function(slides, max_words = 30) {
+# Where the picture changes in a slide's notes, as character positions in
+# `text`: each fragment step (a --- line) and the first quote of each chart
+# button label. Returns the positions, the button labels quoted and those
+# never quoted.
+lc_visual_changes <- function(text, buttons, n_fragments = 0L) {
+  at <- integer(0)
+  sep <- gregexpr("\n\\s*(---|\\|)\\s*\n", text, perl = TRUE)[[1]]
+  kind <- character(0)
+  if (n_fragments > 0 && sep[1] > 0) {
+    at <- c(at, as.integer(sep))
+    kind <- c(kind, rep("fragment", length(sep)))
+  }
+  labels <- if (is.null(buttons) || !is.data.frame(buttons)) character(0) else buttons$label
+  keys <- lc_label_key(labels)
+  quoted <- character(0)
+  if (length(keys)) {
+    m <- gregexpr("(*UTF8)[\"\\x{201c}]([^\"\\x{201c}\\x{201d}]+)[\"\\x{201d}]", enc2utf8(text), perl = TRUE)[[1]]
+    if (m[1] > 0) {
+      ph <- regmatches(enc2utf8(text), list(m))[[1]]
+      k <- lc_label_key(sub("^.", "", sub(".$", "", ph)))
+      hit <- k %in% keys & !duplicated(k)
+      at <- c(at, as.integer(m)[hit])
+      kind <- c(kind, rep("button", sum(hit)))
+      quoted <- unique(k[hit])
+    }
+  }
+  # The first button of each menu shows the chart's starting state, which is
+  # already on screen, so it need not be cued.
+  playable <- if (length(labels)) buttons$button > 0 else logical(0)
+  o <- order(at)
+  list(at = at[o], kind = kind[o], uncued = unique(labels[playable & !keys %in% quoted]))
+}
+
+# Stretches of narration with nothing changing on screen, one per gap
+# between changes: words, the text that starts it, and which change it
+# follows (0 for the start of the slide, k for the k-th change).
+lc_still_stretches <- function(text, at) {
+  cuts <- c(1L, at, nchar(text) + 1L)
+  out <- lapply(seq_len(length(cuts) - 1), function(k) {
+    piece <- substr(text, cuts[k], cuts[k + 1] - 1)
+    piece <- trimws(gsub("(^|\n)\\s*(---|\\|)\\s*(\n|$)", " ", piece, perl = TRUE))
+    n <- if (nzchar(piece)) length(strsplit(piece, "\\s+")[[1]]) else 0
+    data.frame(words = n, start = piece, after = k - 1L, stringsAsFactors = FALSE)
+  })
+  do.call(rbind, out)
+}
+
+# One row per issue in a set of slides from lc_read_slides(). `max_still` is
+# the longest the picture may sit unchanged, in seconds, estimated at
+# `words_per_second` (Edge voices speak at roughly 2.6).
+lc_lint_slides <- function(slides, max_words = 30, max_still = 30, words_per_second = 2.6) {
   rows <- list()
   add <- function(s, issue, found, sentence, advice) {
     rows[[length(rows) + 1]] <<- data.frame(slide = s$index, title = lc_title(s), issue = issue,
@@ -65,8 +114,40 @@ lc_lint_slides <- function(slides, max_words = 30) {
   }
   for (i in seq_len(nrow(slides))) {
     s <- slides[i, ]
-    if (!nzchar(s$notes)) next
-    text <- gsub("\n\\s*(---|\\|)\\s*\n", "\n\n", paste0("\n", s$notes, "\n"))
+    buttons <- if ("buttons" %in% names(slides)) slides$buttons[[i]] else NULL
+    if (!nzchar(s$notes)) {
+      where <- if (s$index == 1) {
+        "Give the title slide a short spoken intro: in the deck's YAML, add title-slide-attributes: with data-notes: \"...\"."
+      } else {
+        "Add ::: notes, even a one-sentence transition, so the video never sits silent."
+      }
+      add(s, "dead air", if (is.na(s$silent)) "no notes" else sprintf("silent %g s", s$silent), "",
+          paste("Nothing is said while this slide shows.", where))
+      next
+    }
+    raw <- paste0("\n", s$notes, "\n")
+    ch <- lc_visual_changes(raw, buttons, s$n_fragments)
+    if (length(ch$uncued)) {
+      add(s, "animation not cued", paste(sprintf("\"%s\"", ch$uncued), collapse = " "), "",
+          "The chart has buttons the narration never plays. Quote each label in the notes at the moment it should play.")
+    }
+    st <- lc_still_stretches(raw, ch$at)
+    st$secs <- st$words / words_per_second
+    st$after_button <- st$after > 0 & ch$kind[pmax(st$after, 1)] == "button"
+    for (k in which(st$after_button & st$secs > max_still)) {
+      add(s, "static after animation", sprintf("about %d s unchanged", round(st$secs[k])), lc_sentences(st$start[k])[1],
+          paste0("The narration walks through what the animation showed while the chart sits at its end. ",
+                 "Give the chart a button for each step that jumps to that step's state, and quote its label as each step is discussed, ",
+                 "so the whole plays first and then each step is shown again as it is explained."))
+    }
+    other <- st[!st$after_button, ]
+    if (nrow(other) && max(other$secs) > max_still) {
+      k <- which.max(other$secs)
+      add(s, "static slide", sprintf("about %d s unchanged", round(other$secs[k])), lc_sentences(other$start[k])[1],
+          paste0("Show, don't just tell. Reveal the points as they are spoken (fragments, with --- between their notes), ",
+                 "play a chart step by quoting its button, or split the slide."))
+    }
+    text <- gsub("\n\\s*(---|\\|)\\s*\n", "\n\n", raw)
     for (sent in lc_sentences(text)) {
       for (issue in names(lc_lint_rules)) {
         r <- lc_lint_rules[[issue]]
@@ -101,7 +182,10 @@ lc_lint_slides <- function(slides, max_words = 30) {
 #' stumble on: symbols and subscripts, abbreviations such as "e.g.", web
 #' addresses, economics and statistics abbreviations such as "SRAS" (with
 #' the words to say instead), phrases written for the live room ("the room
-#' can see", "click"), and long sentences. Nothing is changed; edit the notes in the
+#' can see", "click"), long sentences, and the pacing of the picture: slides
+#' with no narration (dead air), chart buttons the notes never play,
+#' stretches of narration over a slide that does not change, and narration
+#' that walks through an animation's steps after it has finished playing. Nothing is changed; edit the notes in the
 #' deck's source and render it again. See
 #' `vignette("narration", package = "lecturecast")` for the reasoning.
 #'
@@ -109,18 +193,24 @@ lc_lint_slides <- function(slides, max_words = 30) {
 #'   A `.qmd` is mapped to its render using the project's `_quarto.yml`;
 #'   lecturecast never renders, so a missing or out-of-date render stops.
 #' @param max_words Sentences longer than this many words are reported.
+#' @param max_still Report a slide when its picture would sit unchanged for
+#'   longer than this many seconds of narration, estimated from the word
+#'   count. Fragment steps and cued chart buttons count as changes.
 #' @param quiet If `TRUE`, print nothing.
 #' @return Invisibly, a data frame with one row per issue and columns `slide`,
 #'   `title`, `issue`, `found`, `sentence` and `advice`.
 #' @export
-lint_notes <- function(deck, max_words = 30, quiet = FALSE) {
+lint_notes <- function(deck, max_words = 30, max_still = 30, quiet = FALSE) {
   deck <- lc_check_deck(deck)
   if (!is.numeric(max_words) || length(max_words) != 1 || is.na(max_words) || max_words < 1) {
     lc_abort("lint notes", "max_words must be a positive number.")
   }
+  if (!is.numeric(max_still) || length(max_still) != 1 || is.na(max_still) || max_still <= 0) {
+    lc_abort("lint notes", "max_still must be a positive number of seconds.")
+  }
   b <- lc_open_deck(deck, 1280L, 720L)
   on.exit(try(b$close(), silent = TRUE), add = TRUE)
-  out <- lc_lint_slides(lc_read_slides(b, deck), max_words)
+  out <- lc_lint_slides(lc_read_slides(b, deck), max_words, max_still)
   if (!quiet) lc_print_lint(out)
   invisible(out)
 }

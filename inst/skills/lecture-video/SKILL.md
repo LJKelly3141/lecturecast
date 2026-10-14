@@ -53,7 +53,9 @@ this skill is where drafting happens, and the instructor decides.
 2. **Lint.** `lecturecast::lint_notes("<deck>.qmd")` returns one row per
    issue: `slide`, `title`, `issue`, `found`, `sentence`, `advice`.
    Issues: `symbol`, `abbreviation`, `link`, `acronym`, `room`,
-   `long sentence`.
+   `long sentence`, and the pacing checks `dead air`, `animation not cued`,
+   `static slide` and `static after animation` (see "Show, don't tell"
+   below).
 3. **Draft the review file** (`<deck>-narration-review.md`): for each
    flagged sentence, a numbered item with Before, Proposed and a one-line
    reason. Group into "Proposed changes" and "Recommend no change" (with
@@ -69,6 +71,55 @@ this skill is where drafting happens, and the instructor decides.
    from the cache.
 7. **Build** the full video with `build_video("<deck>.qmd")`. Report the
    output paths and length.
+
+## Show, don't tell
+
+The picture should move with the narration. A slide that sits still while
+the voice explains for a minute is a lecture with the projector off. This is
+partly the script and partly how the slide is built, so fix both.
+
+- **No dead air.** Every slide is narrated, including section slides (a one
+  or two sentence transition) and the closing slides. The title slide gets a
+  short spoken intro in the deck's YAML:
+
+  ```yaml
+  title-slide-attributes:
+    data-notes: "Welcome. This lecture is ... In the next twenty minutes ..."
+  ```
+
+  Then drop the title slide from `video: silent:` and set
+  `video: title_card: false`, so the deck's own title slide opens the video.
+- **Keep the overview short.** An agenda slide is about 20 seconds of
+  narration (roughly 50 words). Name the parts; save the explanations for
+  the slides that show them.
+- **Change the picture at least every 30 seconds** (`lint_notes(max_still =)`
+  sets the limit; it estimates time from the word count). Ways to do it:
+  - *Progressive reveal.* Make the bullets fragments (`::: {.incremental}`
+    around a list, or a `::: {.fragment}` block around each point) and split the notes with a line
+    holding only `---` before each point's narration: one more part than
+    the slide has fragment steps, the first part playing before any appears.
+  - *Chart steps.* Every playable button on a chart gets cued: quote its
+    label in the notes at the moment it should play ("AD falls"). The first
+    button of each chart shows the starting state and need not be cued.
+    `lint_notes()` reports buttons the narration never plays.
+  - *More steps.* If a chart's story has a long explanation before its first
+    button, add a button (or a fragment) for the part being explained, so
+    the viewer sees it as it is described. This is a change to the slide,
+    so propose it to the instructor like any other edit.
+  - *Play the whole, then point at the parts.* When one button plays a
+    multi-step story (a tariff in three steps) and the narration then walks
+    through the steps, the chart must not sit at its end state. Give the
+    chart one button per step whose frames are just that step's end state
+    (a single frame, `transition: {duration: 0}`), and quote each step's
+    label as that step is discussed. The whole plays first; then the chart
+    jumps back to step 1, step 2 and step 3 in time with the explanation.
+    Step labels are read aloud, so make them short phrases that work as
+    speech ("Inputs cost more", "Demand falls", "Target restored").
+    `lint_notes()` reports this as `static after animation`.
+  - *Split the slide.* Two ideas, two slides.
+- **Script the animations.** Every chart slide's notes say what plays and
+  when, by quoting the button label; describe what the viewer is watching
+  ("Watch the supply curve slide right") rather than only stating results.
 
 ## Spoken forms
 

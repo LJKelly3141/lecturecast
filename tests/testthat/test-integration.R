@@ -78,3 +78,44 @@ test_that("a Plotly button quoted in the notes plays in the video", {
   expect_false(identical(unname(tools::md5sum(first)), unname(tools::md5sum(last))))
   expect_true(file.exists(r$video))
 })
+
+
+test_that("a step button after the whole story jumps the chart back to that step", {
+  skip_on_cran()
+  skip_on_ci()
+  skip_if_no_ffmpeg()
+  skip_if(!nzchar(Sys.which("quarto")), "Quarto not installed")
+  skip_if(!nzchar(lc_find_chrome()), "Chrome not found")
+  skip_if_not_installed("plotly")
+
+  dir <- withr::local_tempdir()
+  file.copy(test_path("fixtures", "animation-steps.qmd"), dir)
+  processx::run("quarto", c("render", "animation-steps.qmd"), wd = dir)
+  rec <- file.path(dir, "audio", "animation-steps")
+  dir.create(rec, recursive = TRUE)
+  processx::run("ffmpeg", c("-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=duration=4",
+                            file.path(rec, "s03.wav")))
+  cfg <- write_config(c("voice:", "  provider: recorded", "  recorded_dir: audio",
+                        "video:", "  resolution: 720p", "  silent:", "    \"1\": 1"), dir = dir)
+  work <- file.path(dir, "work")
+  r <- build_video(file.path(dir, "animation-steps.qmd"), config = cfg, out_dir = file.path(dir, "out"),
+                   work_dir = work, quiet = TRUE)
+  png <- file.path(work, "png")
+  whole <- sort(list.files(png, pattern = "^s03-anim1-"))
+  step <- list.files(png, pattern = "^s03-anim2-")
+  expect_length(whole, 3)
+  expect_length(step, 1)
+  # Compare the plot area only (the highlighted button differs between
+  # steps), allowing for anti-aliasing: PSNR in dB, higher is closer.
+  psnr <- function(a, b) {
+    res <- processx::run("ffmpeg", c("-hide_banner", "-i", file.path(png, a), "-i", file.path(png, b), "-lavfi",
+                                     "[0:v]crop=iw*0.75:ih*0.6:iw*0.15:ih*0.3[a];[1:v]crop=iw*0.75:ih*0.6:iw*0.15:ih*0.3[b];[a][b]psnr",
+                                     "-f", "null", "-"))
+    v <- regmatches(res$stderr, regexpr("average:[0-9.inf]+", res$stderr))
+    as.numeric(sub("average:", "", sub("inf", "Inf", v)))
+  }
+  # The step shows the first stage again, not the end state the whole story left.
+  expect_gt(psnr(step, whole[1]), 45)
+  expect_lt(psnr(step, whole[3]), 40)
+  expect_true(file.exists(r$video))
+})

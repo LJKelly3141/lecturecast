@@ -18,8 +18,8 @@ test_that("each kind of issue is found and named", {
   expect_true(all(nzchar(out$advice)))
 })
 
-test_that("clean notes, silent slides and ordinary words pass", {
-  slides <- fake_slides(c("When spending falls, output falls with it.", "",
+test_that("clean notes and ordinary words pass", {
+  slides <- fake_slides(c("When spending falls, output falls with it.",
                           "Real GDP and the price level move together. The classroom example still works."))
   expect_equal(nrow(lc_lint_slides(slides)), 0)
 })
@@ -45,6 +45,7 @@ test_that("lint_notes checks its arguments before opening Chrome", {
   f <- withr::local_tempfile(fileext = ".html")
   file.create(f)
   expect_error(lint_notes(f, max_words = 0), "max_words")
+  expect_error(lint_notes(f, max_still = -1), "max_still")
 })
 
 test_that("lint_notes reads a real deck", {
@@ -90,4 +91,53 @@ test_that("the lecture-video skill's spoken forms match the lint list", {
   parts <- strsplit(sub("^\\| ", "", sub(" \\|$", "", rows)), " | ", fixed = TRUE)
   table <- setNames(vapply(parts, `[`, "", 2), vapply(parts, `[`, "", 1))[-1]
   expect_equal(table, lc_spoken_forms)
+})
+
+
+with_buttons <- function(slides, i, labels) {
+  slides$buttons <- rep(list(NULL), nrow(slides))
+  slides$buttons[[i]] <- data.frame(plot = 0L, menu = 0L, button = seq_along(labels) - 1L,
+                                    label = labels, method = "animate", stringsAsFactors = FALSE)
+  slides
+}
+
+test_that("a slide with nothing said is dead air, and the title slide gets its own fix", {
+  out <- lc_lint_slides(fake_slides(c("", "Hello.", ""), silent = c(2, NA, 3)))
+  expect_equal(out$issue, c("dead air", "dead air"))
+  expect_equal(out$found, c("silent 2 s", "silent 3 s"))
+  expect_match(out$advice[1], "title-slide-attributes")
+  expect_match(out$advice[2], "one-sentence transition")
+})
+
+test_that("chart buttons the narration never quotes are reported", {
+  slides <- with_buttons(fake_slides("Watch \u201cAD falls\u201d now."), 1, c("Start", "AD falls", "AD rises"))
+  out <- lc_lint_slides(slides)
+  expect_equal(out$found[out$issue == "animation not cued"], "\"AD rises\"")
+})
+
+test_that("a long stretch of narration over an unchanging picture is reported", {
+  long <- paste(rep("This sentence explains the idea at some length for listeners.", 12), collapse = " ")
+  out <- lc_lint_slides(fake_slides(long))
+  expect_equal(out$issue, "static slide")
+  expect_match(out$found, "about 46 s unchanged")
+  expect_match(out$advice, "Show, don't just tell")
+  half <- paste(rep("This sentence explains the idea at some length for listeners.", 6), collapse = " ")
+  cued <- with_buttons(fake_slides(paste(half, "Now \"Play\" it.", half)), 1, "Play")
+  expect_false("static slide" %in% lc_lint_slides(cued)$issue)
+  stepped <- fake_slides(paste0(half, "\n\n---\n\n", half), n_fragments = 1L)
+  expect_false("static slide" %in% lc_lint_slides(stepped)$issue)
+  unstepped <- fake_slides(paste0(half, "\n\n---\n\n", half))
+  expect_true("static slide" %in% lc_lint_slides(unstepped)$issue)
+  expect_false("static slide" %in% lc_lint_slides(fake_slides(long), max_still = 60)$issue)
+})
+
+
+test_that("walking through an animation after it plays asks for step buttons", {
+  half <- paste(rep("This sentence explains the idea at some length for listeners.", 9), collapse = " ")
+  slides <- with_buttons(fake_slides(paste("Now \"Tariff\" plays all three steps.", half)), 1, c("Start", "Tariff"))
+  out <- lc_lint_slides(slides)
+  expect_equal(out$issue, "static after animation")
+  expect_match(out$advice, "a button for each step")
+  before <- with_buttons(fake_slides(paste(half, "Now \"Tariff\" plays.")), 1, c("Start", "Tariff"))
+  expect_equal(lc_lint_slides(before)$issue, "static slide")
 })

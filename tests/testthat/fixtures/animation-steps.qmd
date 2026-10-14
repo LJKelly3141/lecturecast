@@ -1,0 +1,30 @@
+---
+title: "Animation steps fixture"
+format:
+  revealjs:
+    embed-resources: true
+---
+
+## A moving point {data-silent="1"}
+
+## Shift
+
+```{r}
+#| echo: false
+library(plotly)
+df <- data.frame(x = c(1, 2, 3, 4), y = c(1, 2, 3, 4), f = c("a", "b", "c", "d"))
+frames <- lapply(seq_len(nrow(df)), function(i) list(name = df$f[i], data = list(list(x = list(df$x[i]), y = list(df$y[i])))))
+p <- plot_ly(x = 1, y = 1, type = "scatter", mode = "markers", marker = list(size = 30)) |>
+  layout(xaxis = list(range = c(0, 5)), yaxis = list(range = c(0, 5)),
+         updatemenus = list(list(type = "buttons", x = 0, y = 1.1, buttons = list(
+           list(label = "Start", method = "animate", args = list(list("a"), list(mode = "immediate", frame = list(duration = 40, redraw = TRUE), transition = list(duration = 0)))),
+           list(label = "Whole story", method = "animate", args = list(list("b", "c", "d"), list(mode = "immediate", frame = list(duration = 200, redraw = TRUE), transition = list(duration = 0)))),
+           list(label = "Step one", method = "animate", args = list(list("b"), list(mode = "immediate", frame = list(duration = 0, redraw = TRUE), transition = list(duration = 0))))
+         ))))
+p$x$frames <- frames
+p
+```
+
+::: notes
+Here is the “Whole story” in three steps. Now back to “Step one”, where it began to climb.
+:::

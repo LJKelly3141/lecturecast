@@ -66,7 +66,8 @@ The ElevenLabs key comes only from the `ELEVENLABS_API_KEY` environment variable
 2. **Polish.** Fragments on cue, crossfades, title and end cards, segment cache.
 3. **Podcast.** Dialogue script format, ElevenLabs dialogue, single-voice path, transcript.
 4. **Animated Plotly.** Charts animated in step with the narration, if still wanted after phase 2.
-5. **coursepack link.** `Suggests`, availability check, install skill in coursepack, a place for outputs outside git.
+4b. **Notes written for the ear.** A vignette, "Writing notes for narration": rules for spoken text (contractions, one idea per sentence, symbols and abbreviations written out, no live-room phrases) plus the deck conventions lecturecast reads (`---` fragment steps, quoted button names, silent slides). Sources: ElevenLabs' text-to-speech best-practices page, and The eLearning Coach's voice-over script guide. A `lint_notes(deck)` that reports, and never edits, what reads badly aloud: symbols ("%", subscripts), "e.g." and "etc.", long sentences, room phrases ("the room can see"). Any AI rewrite of notes stays in the `lecture-video` skill, with every change approved by the instructor; the package only checks.
+5. **coursepack link.** `Suggests`, availability check, install skill in coursepack, a place for outputs outside git. coursepack links to the narration vignette and can run `lint_notes()` in its build.
 6. **Public release.** Repo made public; CRAN optional.
 
 ## To verify before building

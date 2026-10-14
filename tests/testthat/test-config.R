@@ -41,3 +41,13 @@ test_that("an unset voice id stops the build", {
   cfg <- lecturecast_config(config = path)
   expect_error(lc_voice_id(cfg, "narrator"), "narrator")
 })
+
+test_that("card and fragment settings are checked", {
+  bad <- function(...) lecturecast_config(config = write_config(c("voice:", "  provider: edge", "video:", ...)))
+  expect_error(bad("  card_color: red"), "hex colour")
+  expect_error(bad("  fragments: maybe"), "true or false")
+  expect_error(bad("  title_card:", "    titel: Hi"), "Unknown card setting: titel")
+  expect_error(bad("  crossfade: -1"), "crossfade")
+  cfg <- bad("  title_card:", "    title: Week 7")
+  expect_equal(cfg$video$title_card$title, "Week 7")
+})

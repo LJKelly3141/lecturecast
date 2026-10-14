@@ -59,18 +59,36 @@ lc_config_defaults <- function(raw) {
     video = list(
       resolution = video$resolution %||% "1080p",
       fps = video$fps %||% 30,
-      title_card = isTRUE(video$title_card %||% FALSE),
-      end_card = isTRUE(video$end_card %||% FALSE),
+      title_card = lc_card_setting(video$title_card),
+      end_card = lc_card_setting(video$end_card),
+      card_background = video$card_background %||% "#ffffff",
+      card_color = video$card_color %||% "#222222",
+      fragments = video$fragments %||% TRUE,
       crossfade = video$crossfade %||% 0.5,
-      lead_in = video$lead_in %||% 0.4,
-      tail = video$tail %||% 0.8,
+      lead_in = video$lead_in %||% 0.3,
+      tail = video$tail %||% 0.5,
       card_seconds = video$card_seconds %||% 4,
       silent = video$silent %||% list()
     ),
     podcast = list(
-      gap = podcast$gap %||% 0.35
+      gap = podcast$gap %||% 0.35,
+      mode = podcast$mode,
+      host_a_name = podcast$host_a_name %||% "Host A",
+      host_b_name = podcast$host_b_name %||% "Host B"
     )
   )
+}
+
+# A card setting is false, true, or a list of title and subtitle text.
+lc_card_setting <- function(x) {
+  if (is.null(x) || isFALSE(x)) return(NULL)
+  if (isTRUE(x)) return(list())
+  if (is.list(x)) {
+    bad <- setdiff(names(x), c("title", "subtitle"))
+    if (length(bad)) lc_abort("settings", paste0("Unknown card setting: ", paste(bad, collapse = ", "), ". Use title: and subtitle:."))
+    return(x)
+  }
+  lc_abort("settings", "title_card: and end_card: must be true, false, or have title: and subtitle: lines.")
 }
 
 lc_config_validate <- function(cfg, path) {
@@ -84,6 +102,23 @@ lc_config_validate <- function(cfg, path) {
   if (p == "recorded" && is.null(cfg$voice$recorded_dir)) {
     lc_abort(step, "provider is recorded but voice: recorded_dir: is not set.", file = path,
              fix = "Set voice: recorded_dir: to the folder holding your audio files.")
+  }
+  for (k in c("crossfade", "lead_in", "tail", "card_seconds", "fps")) {
+    val <- cfg$video[[k]]
+    if (!is.numeric(val) || length(val) != 1 || is.na(val) || val < 0 || (k %in% c("card_seconds", "fps") && val == 0)) {
+      lc_abort(step, paste0("video: ", k, ": must be a number of seconds (or frames per second for fps)."), file = path)
+    }
+  }
+  for (k in c("card_background", "card_color")) {
+    if (!grepl("^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$", cfg$video[[k]])) {
+      lc_abort(step, paste0("video: ", k, ": must be a hex colour such as \"#ffffff\"."), file = path)
+    }
+  }
+  if (!is.logical(cfg$video$fragments) || length(cfg$video$fragments) != 1 || is.na(cfg$video$fragments)) {
+    lc_abort(step, "video: fragments: must be true or false.", file = path)
+  }
+  if (!is.numeric(cfg$podcast$gap) || length(cfg$podcast$gap) != 1 || cfg$podcast$gap < 0) {
+    lc_abort(step, "podcast: gap: must be a number of seconds.", file = path)
   }
   if (!cfg$video$resolution %in% names(lc_resolutions)) {
     lc_abort(step, paste0("video: resolution: must be one of ", paste(names(lc_resolutions), collapse = ", "), "."),

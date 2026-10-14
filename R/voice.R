@@ -14,6 +14,21 @@ lc_edge_command <- function() {
            fix = "Install uv (https://docs.astral.sh/uv/) or run: uv tool install edge-tts")
 }
 
+# The edge-tts version that will run, for the cache key: the pinned version
+# under uvx, or what an installed edge-tts reports. Looked up once per session.
+lc_edge_engine <- function() {
+  cmd <- lc_edge_command()
+  if (length(cmd) > 1) return(cmd[2])
+  if (is.null(lc_state$edge_engine[[cmd]])) {
+    res <- lc_run(cmd, "--version", step = "voice (edge)", timeout = 60)
+    lc_state$edge_engine[[cmd]] <- paste0("edge-tts ", trimws(res$stdout))
+  }
+  lc_state$edge_engine[[cmd]]
+}
+
+lc_state <- new.env(parent = emptyenv())
+lc_state$edge_engine <- list()
+
 # Voice one piece of text to `out` (an .mp3 path). Returns
 # list(file, timing) where timing is NULL, a data frame of cues (text,
 # start, end) or a data frame of characters (char, start, end).

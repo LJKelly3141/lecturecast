@@ -1,0 +1,40 @@
+---
+title: "Fixture deck"
+format:
+  revealjs:
+    embed-resources: true
+---
+
+## Title only {data-silent="2"}
+
+## Three points
+
+- First point
+
+. . .
+
+- Second point
+
+::: {.fragment}
+- Third point
+:::
+
+::: notes
+Here are the points.
+
+---
+
+The first one appears.
+
+---
+
+And the second.
+:::
+
+## Plain slide
+
+Some text.
+
+::: notes
+A slide with one sentence of notes. And a second sentence.
+:::

@@ -9,6 +9,7 @@ build_video(
   config = NULL,
   out_dir = dirname(deck),
   work_dir = NULL,
+  cache_dir = NULL,
   quiet = FALSE
 )
 }
@@ -22,6 +23,10 @@ looked for next to the deck and in parent folders up to the course root.}
 
 \item{work_dir}{Folder for intermediate files (captures, audio, clips). By
 default a temporary folder that is removed after a successful build.}
+
+\item{cache_dir}{Folder holding voiced segments for reuse. Defaults to the
+\code{lecturecast.cache_dir} option, else the user cache folder from
+\code{\link[tools:R_user_dir]{tools::R_user_dir()}}.}
 
 \item{quiet}{If \code{TRUE}, print only errors.}
 }

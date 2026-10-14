@@ -55,3 +55,24 @@ lc_concat <- function(clips, out, step = "assemble") {
   }
   got
 }
+
+# A short silent clip fading from one picture to the next. It sits in the
+# pause between two narrations, so no speech overlaps.
+lc_fade_clip <- function(png_a, png_b, out, cfg) {
+  step <- "assemble"
+  v <- cfg$video
+  wh <- lc_resolutions[[v$resolution]]
+  d <- v$crossfade
+  scale <- sprintf("scale=%d:%d:flags=lanczos,setsar=1,format=yuv420p,fps=%s", wh[1], wh[2], v$fps)
+  graph <- sprintf("[0:v]%s[a];[1:v]%s[b];[a][b]xfade=transition=fade:duration=%.3f:offset=0[v]", scale, scale, d)
+  args <- c("-y", "-hide_banner", "-loglevel", "error",
+            "-loop", "1", "-framerate", as.character(v$fps), "-t", sprintf("%.3f", d), "-i", png_a,
+            "-loop", "1", "-framerate", as.character(v$fps), "-t", sprintf("%.3f", d), "-i", png_b,
+            "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
+            "-filter_complex", graph, "-map", "[v]", "-map", "2:a", "-t", sprintf("%.3f", d),
+            lc_ffmpeg_video_args(v$fps), out)
+  lc_run(lc_tool("ffmpeg", step), args, step = step, file = out, timeout = 120)
+  got <- lc_duration(out, step)
+  if (abs(got - d) > 0.15) lc_abort(step, sprintf("Fade is %.2f s long, expected %.2f s.", got, d), file = out)
+  got
+}

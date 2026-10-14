@@ -12,12 +12,15 @@
 #' @param out_dir Folder for the finished files. Defaults to the deck's folder.
 #' @param work_dir Folder for intermediate files (captures, audio, clips). By
 #'   default a temporary folder that is removed after a successful build.
+#' @param cache_dir Folder holding voiced segments for reuse. Defaults to the
+#'   `lecturecast.cache_dir` option, else the user cache folder from
+#'   [tools::R_user_dir()].
 #' @param quiet If `TRUE`, print only errors.
 #' @return Invisibly, a list with the paths of the video, captions and
 #'   transcript, and the video's duration in seconds.
 #' @export
 build_video <- function(deck, config = NULL, out_dir = dirname(deck), work_dir = NULL,
-                        quiet = FALSE) {
+                        cache_dir = NULL, quiet = FALSE) {
   lc_check_deck(deck)
   deck <- normalizePath(deck)
   cfg <- lecturecast_config(deck, config)
@@ -31,6 +34,7 @@ build_video <- function(deck, config = NULL, out_dir = dirname(deck), work_dir =
   ok <- FALSE
   out_dir <- lc_dir_create(out_dir)
   for (d in c("png", "audio", "clips")) lc_dir_create(file.path(work, d))
+  cache <- lc_cache_dir(cache_dir)
 
   # Script and capture, in one Chrome session.
   b <- lc_open_deck(deck, wh[1], wh[2])
@@ -43,7 +47,7 @@ build_video <- function(deck, config = NULL, out_dir = dirname(deck), work_dir =
   lc_say(quiet, sprintf("Script: %d slides, %d segments (%d voiced, %d silent).",
                         nrow(slides), nrow(segs), n_voiced, nrow(segs) - n_voiced))
 
-  voice <- lc_prepare_voice(cfg, segs, name)
+  voice <- lc_prepare_voice(cfg, segs, name, cache)
 
   lc_prepare_capture(b, deck)
   segs$png <- file.path(work, "png", paste0(segs$id, ".png"))
@@ -51,21 +55,29 @@ build_video <- function(deck, config = NULL, out_dir = dirname(deck), work_dir =
     lc_goto(b, segs$h[i], segs$v[i], segs$fragment[i], deck)
     lc_screenshot(b, segs$png[i], wh[1], wh[2], deck)
   }
+  cards <- lc_capture_cards(b, cfg, title, work, wh, deck)
   try(b$close(), silent = TRUE)
   chrome_open <- FALSE
   lc_done(quiet, sprintf("Captured %d slide states at %dx%d.", nrow(segs), wh[1], wh[2]))
 
-  # Voice.
+  # Voice. Segments already voiced with the same text and settings come
+  # from the cache and cost nothing.
   timings <- vector("list", nrow(segs))
   segs$audio <- NA_character_
+  reused <- 0L
   for (i in which(is.na(segs$silent))) {
     v <- voice(segs[i, ], file.path(work, "audio", paste0(segs$id[i], ".mp3")))
     segs$audio[i] <- v$file
     timings[i] <- list(v$timing)
-    lc_say(quiet, sprintf("Voiced %s (%d of %d).", segs$id[i], sum(!is.na(segs$audio)), n_voiced))
+    reused <- reused + isTRUE(v$cached)
+    if (!isTRUE(v$cached)) {
+      lc_say(quiet, sprintf("Voiced %s (%d of %d).", segs$id[i], sum(!is.na(segs$audio)), n_voiced))
+    }
   }
+  lc_done(quiet, sprintf("Voice: %d segments voiced, %d reused from the cache.", n_voiced - reused, reused))
 
-  # Clips.
+  # Clips, with a short fade between consecutive pictures and optional
+  # title and end cards.
   segs$clip <- file.path(work, "clips", paste0(segs$id, ".mp4"))
   segs$clip_seconds <- NA_real_
   for (i in seq_len(nrow(segs))) {
@@ -75,14 +87,16 @@ build_video <- function(deck, config = NULL, out_dir = dirname(deck), work_dir =
       lc_still_clip(segs$png[i], segs$clip[i], cfg, seconds = segs$silent[i])
     }
   }
+  timeline <- lc_timeline(segs, cards, cfg, work)
 
   # Join, caption, transcript. Written under temporary names, renamed once
   # every check has passed.
   final <- file.path(out_dir, paste0(name, c(".mp4", ".vtt", "-transcript.md")))
   part <- file.path(out_dir, paste0(name, c(".partial.mp4", ".partial.vtt", "-transcript.partial.md")))
   on.exit(unlink(part), add = TRUE)
-  total <- lc_concat(segs$clip, part[1])
+  total <- lc_concat(timeline$clip, part[1])
 
+  segs$start <- timeline$start[match(segs$id, timeline$id)]
   cues <- lc_video_cues(segs, timings, cfg)
   lc_write_vtt(cues, part[2])
   if (max(cues$end) > total + 0.5) {
@@ -95,6 +109,90 @@ build_video <- function(deck, config = NULL, out_dir = dirname(deck), work_dir =
   lc_done(quiet, sprintf("Completed: %s (%s), captions and transcript checked.", final[1], lc_hms(total)))
   invisible(list(video = final[1], captions = final[2], transcript = final[3], seconds = total,
                  segments = segs))
+}
+
+# The order of clips in the video, with fades between pictures. Returns a
+# data frame of id, clip and start (seconds from the start of the video).
+lc_timeline <- function(segs, cards, cfg, work) {
+  items <- data.frame(id = segs$id, png = segs$png, clip = segs$clip,
+                      seconds = segs$clip_seconds, stringsAsFactors = FALSE)
+  if (!is.null(cards$title)) {
+    d <- lc_still_clip(cards$title, file.path(work, "clips", "title-card.mp4"), cfg, seconds = cfg$video$card_seconds)
+    items <- rbind(data.frame(id = "title-card", png = cards$title, clip = file.path(work, "clips", "title-card.mp4"),
+                              seconds = d), items)
+  }
+  if (!is.null(cards$end)) {
+    d <- lc_still_clip(cards$end, file.path(work, "clips", "end-card.mp4"), cfg, seconds = cfg$video$card_seconds)
+    items <- rbind(items, data.frame(id = "end-card", png = cards$end, clip = file.path(work, "clips", "end-card.mp4"),
+                                     seconds = d))
+  }
+  fade <- cfg$video$crossfade
+  if (fade > 0 && nrow(items) > 1) {
+    rows <- list(items[1, ])
+    for (i in 2:nrow(items)) {
+      tr <- file.path(work, "clips", sprintf("fade-%03d.mp4", i - 1))
+      d <- lc_fade_clip(items$png[i - 1], items$png[i], tr, cfg)
+      rows[[length(rows) + 1]] <- data.frame(id = paste0("fade-", i - 1), png = NA_character_, clip = tr, seconds = d)
+      rows[[length(rows) + 1]] <- items[i, ]
+    }
+    items <- do.call(rbind, rows)
+  }
+  items$start <- c(0, cumsum(items$seconds))[seq_len(nrow(items))]
+  items
+}
+
+lc_cache_dir <- function(cache_dir = NULL) {
+  lc_dir_create(cache_dir %||% getOption("lecturecast.cache_dir", tools::R_user_dir("lecturecast", "cache")))
+}
+
+# The cache key for one voiced segment: everything that changes the audio.
+lc_cache_key <- function(cfg, voice_id, text, model = NULL) {
+  parts <- list(
+    provider = cfg$voice$provider, voice = voice_id,
+    model = if (cfg$voice$provider == "elevenlabs") model %||% cfg$voice$model else NULL,
+    settings = if (cfg$voice$provider == "elevenlabs") cfg$voice$settings else NULL,
+    rate = if (cfg$voice$provider == "edge") cfg$voice$edge_rate else NULL,
+    engine = if (cfg$voice$provider == "edge") lc_edge_engine() else NULL,
+    text = enc2utf8(text)
+  )
+  cli::hash_sha256(as.character(jsonlite::toJSON(parts, auto_unbox = TRUE, null = "null")))
+}
+
+# Voice through the cache: reuse the audio when the key matches, otherwise
+# voice, check, then store. Entries are written under temporary names and
+# renamed, audio first and the JSON last, so a JSON file marks a finished
+# entry. A damaged entry stops the build and says which files to delete.
+lc_cached_voice <- function(key, cache, voice_fun, work_file) {
+  step <- "voice (cache)"
+  audio <- file.path(cache, paste0(key, ".mp3"))
+  meta <- file.path(cache, paste0(key, ".json"))
+  if (file.exists(meta)) {
+    fix <- paste0("Delete ", file.path(cache, paste0(key, ".*")), " and build again; that segment will be voiced afresh.")
+    m <- tryCatch(jsonlite::fromJSON(meta),
+                  error = function(e) lc_abort(step, "The cache entry is damaged.", file = meta, fix = fix))
+    if (!file.exists(audio) || file.size(audio) == 0) lc_abort(step, "The cached audio is missing.", file = audio, fix = fix)
+    d <- tryCatch(lc_duration(audio, step), lecturecast_error = function(e) {
+      lc_abort(step, "The cached audio cannot be read.", file = audio, fix = fix)
+    })
+    if (is.null(m$seconds) || abs(d - m$seconds) > 0.05) {
+      lc_abort(step, "The cached audio is not the length recorded for it.", file = audio, fix = fix)
+    }
+    timing <- m$timing
+    if (is.list(timing) && !is.data.frame(timing) && length(timing) == 0) timing <- NULL
+    return(list(file = audio, timing = timing, cached = TRUE))
+  }
+  v <- voice_fun(work_file)
+  d <- lc_duration(v$file, step)
+  tmp <- file.path(cache, paste0(key, c(".mp3", ".json"), ".tmp"))
+  on.exit(unlink(tmp), add = TRUE)
+  ok <- file.copy(v$file, tmp[1], overwrite = TRUE)
+  writeLines(jsonlite::toJSON(list(seconds = d, timing = v$timing), dataframe = "rows", digits = NA,
+                              auto_unbox = TRUE), tmp[2])
+  if (!ok || !file.rename(tmp[1], audio) || !file.rename(tmp[2], meta)) {
+    unlink(c(audio, meta))
+    lc_abort(step, "Could not store the audio in the cache.", file = audio)
+  }
+  list(file = audio, timing = v$timing, cached = FALSE)
 }
 
 # Move finished files into place together. Old versions are set aside first
@@ -119,24 +217,26 @@ lc_publish <- function(part, final) {
 
 # A function voicing one segment row to a file, after checking the voice is
 # usable. Recorded mode looks up every file before anything is built.
-lc_prepare_voice <- function(cfg, segs, name) {
+lc_prepare_voice <- function(cfg, segs, name, cache) {
   voiced <- segs$id[is.na(segs$silent)]
   if (cfg$voice$provider == "recorded") {
     files <- lc_recorded_files(voiced, cfg, name)
     return(function(seg, out) {
       f <- files[[seg$id]]
       lc_duration(f, "voice (recorded)")
-      list(file = f, timing = NULL)
+      list(file = f, timing = NULL, cached = FALSE)
     })
   }
   voice_id <- lc_voice_id(cfg, "narrator")
-  if (cfg$voice$provider == "elevenlabs") lc_elevenlabs_key("voice (elevenlabs)")
   if (cfg$voice$provider == "edge") lc_edge_command()
-  function(seg, out) lc_voice(seg$text, voice_id, cfg, out)
+  function(seg, out) {
+    lc_cached_voice(lc_cache_key(cfg, voice_id, seg$text), cache,
+                    function(f) lc_voice(seg$text, voice_id, cfg, f), out)
+  }
 }
 
 lc_video_cues <- function(segs, timings, cfg) {
-  starts <- c(0, cumsum(segs$clip_seconds))[seq_len(nrow(segs))]
+  starts <- segs$start %||% c(0, cumsum(segs$clip_seconds))[seq_len(nrow(segs))]
   out <- list()
   for (i in which(is.na(segs$silent))) {
     a_dur <- segs$clip_seconds[i] - cfg$video$lead_in - cfg$video$tail

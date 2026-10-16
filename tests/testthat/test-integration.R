@@ -25,7 +25,9 @@ test_that("a deck with fragments, cards and fades builds and checks out", {
   out <- file.path(dir, "out")
   r <- build_video(deck, config = cfg, out_dir = out, quiet = TRUE)
 
-  expect_true(all(file.exists(c(r$video, r$captions, r$transcript))))
+  expect_true(all(file.exists(c(r$video, r$captions, r$transcript, r$chapters))))
+  expect_match(readLines(r$chapters)[1], "^0:00 ")
+  expect_equal(lc_dimensions(r$thumbnail, "t"), c(1280L, 720L))
   expect_equal(r$segments$id, c("s01", "s02", "s03-1", "s03-2", "s03-3", "s04"))
   expect_equal(r$segments$fragment, c(-1L, -1L, -1L, 0L, 1L, -1L))
   expect_equal(lc_dimensions(r$video, "t"), c(1280L, 720L))

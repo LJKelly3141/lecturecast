@@ -72,6 +72,7 @@ lc_config_defaults <- function(raw) {
       tail = video$tail %||% 0.5,
       card_seconds = video$card_seconds %||% 4,
       silent = video$silent %||% list(),
+      thumbnail = video$thumbnail %||% 1,
       out_dir = video$out_dir
     ),
     podcast = list(
@@ -132,6 +133,10 @@ lc_config_validate <- function(cfg, path) {
   sp <- cfg$video$animation_speed
   if (!is.numeric(sp) || length(sp) != 1 || is.na(sp) || sp <= 0) {
     lc_abort(step, "video: animation_speed: must be a number above 0 (1 = the deck's own speed).", file = path)
+  }
+  th <- cfg$video$thumbnail
+  if (!is.numeric(th) || length(th) != 1 || is.na(th) || th < 1 || th != round(th)) {
+    lc_abort(step, "video: thumbnail: must be a slide number (1 = the title slide).", file = path)
   }
   if (!is.numeric(cfg$podcast$gap) || length(cfg$podcast$gap) != 1 || cfg$podcast$gap < 0) {
     lc_abort(step, "podcast: gap: must be a number of seconds.", file = path)

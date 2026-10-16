@@ -22,8 +22,14 @@
 #'   for a test or a partial video. By default every slide. The whole deck's
 #'   notes are still checked.
 #' @param quiet If `TRUE`, print only errors.
-#' @return Invisibly, a list with the paths of the video, captions and
-#'   transcript, and the video's duration in seconds.
+#' @return Invisibly, a list with the paths of the video, captions,
+#'   transcript and chapter list, and the video's duration in seconds.
+#'   The chapter list (`<deck>-chapters.txt`) is in the form YouTube reads
+#'   from a description: the first chapter at 0:00, each at least 10
+#'   seconds, section dividers folded into the chapter after them. The
+#'   thumbnail (`<deck>-thumbnail.jpg`, 1280x720) is the finished state of
+#'   the slide set by `video: thumbnail:` (default 1, the title slide), or
+#'   of the first slide built when that one is left out.
 #' @export
 build_video <- function(deck, config = NULL, out_dir = NULL, work_dir = NULL,
                         cache_dir = NULL, slides = NULL, quiet = FALSE) {
@@ -149,10 +155,11 @@ build_video <- function(deck, config = NULL, out_dir = NULL, work_dir = NULL,
   }, "")
   timeline <- lc_timeline(segs, cards, cfg, work)
 
-  # Join, caption, transcript. Written under temporary names, renamed once
+  # Join, caption, transcript, chapters. Written under temporary names, renamed once
   # every check has passed.
-  final <- file.path(out_dir, paste0(name, c(".mp4", ".vtt", "-transcript.md")))
-  part <- file.path(out_dir, paste0(name, c(".partial.mp4", ".partial.vtt", "-transcript.partial.md")))
+  final <- file.path(out_dir, paste0(name, c(".mp4", ".vtt", "-transcript.md", "-chapters.txt", "-thumbnail.jpg")))
+  part <- file.path(out_dir, paste0(name, c(".partial.mp4", ".partial.vtt", "-transcript.partial.md",
+                                            "-chapters.partial.txt", "-thumbnail.partial.jpg")))
   on.exit(unlink(part), add = TRUE)
   total <- lc_concat(timeline$clip, part[1])
 
@@ -163,11 +170,14 @@ build_video <- function(deck, config = NULL, out_dir = NULL, work_dir = NULL,
     lc_abort("captions", "Captions run past the end of the video.", file = part[2])
   }
   lc_write_transcript(segs, title, part[3])
+  lc_write_video_chapters(lc_video_chapters(slides, segs, total), part[4])
+  lc_write_thumbnail(segs, cfg$video$thumbnail, part[5])
 
   lc_publish(part, final)
   ok <- TRUE
   lc_done(quiet, sprintf("Completed: %s (%s), captions and transcript checked.", final[1], lc_hms(total)))
-  invisible(list(video = final[1], captions = final[2], transcript = final[3], seconds = total,
+  invisible(list(video = final[1], captions = final[2], transcript = final[3], chapters = final[4],
+                 thumbnail = final[5], seconds = total,
                  segments = segs))
 }
 

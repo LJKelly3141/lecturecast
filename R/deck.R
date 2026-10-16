@@ -94,6 +94,9 @@ lc_read_slides <- function(b, deck) {
       return {
         index: i + 1, h: ix.h, v: ix.v === undefined ? 0 : ix.v,
         title: head ? head.textContent.trim() : '',
+        // Quarto's title slide, and the divider a level-one heading makes.
+        title_slide: s.id === 'title-slide',
+        section: s.classList.contains('level1') && s.id !== 'title-slide',
         notes: toText(Reveal.getSlideNotes(s)),
         notes_html: Reveal.getSlideNotes(s) || '',
         fragments: Array.from(s.querySelectorAll('.fragment'))
@@ -115,6 +118,8 @@ lc_read_slides <- function(b, deck) {
     h = vapply(x, function(s) s$h, integer(1)),
     v = vapply(x, function(s) s$v, integer(1)),
     title = vapply(x, function(s) s$title, character(1)),
+    title_slide = vapply(x, function(s) isTRUE(s$title_slide), logical(1)),
+    section = vapply(x, function(s) isTRUE(s$section), logical(1)),
     notes = vapply(x, function(s) lc_clean_notes(s$notes), character(1)),
     notes_html = vapply(x, function(s) s$notes_html, character(1)),
     n_fragments = vapply(x, function(s) lc_fragment_steps(s$fragments), integer(1)),

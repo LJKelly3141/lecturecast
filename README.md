@@ -69,11 +69,25 @@ For a podcast, write a script with `HOST_A:` and `HOST_B:` lines and `##` chapte
 build_podcast("podcasts/sticky-wages.txt")
 ```
 
+## YouTube
+
+`build_video()` also writes `week7-chapters.txt`, a chapter list in the form YouTube reads from a description, and `week7-thumbnail.jpg` from the title slide (`video: thumbnail:` in `lecturecast.yml` picks another slide). To upload the video with its captions, chapters and thumbnail:
+
+```r
+youtube_login()   # once per computer, in an interactive R session
+youtube_upload("build/video/week7.mp4", title = "Week 7: Sticky wages",
+               description = "Chapter 12 of Principles of Macroeconomics 3e.",
+               playlist = "https://www.youtube.com/playlist?list=...",
+               dry_run = TRUE)
+```
+
+The dry run prints exactly what would be sent; run it again without `dry_run` to upload. Videos are unlisted unless `privacy` says otherwise. Each upload is recorded in `lecturecast-youtube.json` beside `lecturecast.yml` (keep it in git), so running again updates the same video instead of uploading a duplicate. YouTube cannot swap a video's file, so a rebuilt video stops the upload unless `replace = TRUE`: the new video then takes the old one's playlist place, and the old one is set to private. The OAuth client comes from `YT_CLIENT_ID` and `YT_CLIENT_SECRET` in `~/.Renviron`.
+
 ## With an AI assistant
 
-lecturecast is designed to be used with an AI assistant. It ships a skill, `lecture-video`, which reviews a deck's notes with `lint_notes()`, drafts each rewrite for the instructor to approve, applies only the approved changes, previews the changed slides and builds the video. The package itself never calls an AI.
+lecturecast is designed to be used with an AI assistant. It ships two skills. `lecture-video` reviews a deck's notes with `lint_notes()`, drafts each rewrite for the instructor to approve, applies only the approved changes, previews the changed slides and builds the video. `youtube-upload` shows the instructor a dry run and uploads only after they approve the title, privacy and playlist. The package itself never calls an AI.
 
-In a coursepack course, `coursepack::install_skills()` copies the `lecture-video` skill into the course when lecturecast is installed, and coursepack's course-slides skill hands off to it when a deck should become a video.
+In a coursepack course, `coursepack::install_skills()` copies these skills into the course when lecturecast is installed, and coursepack's course-slides skill hands off to it when a deck should become a video.
 
 ## Licence
 

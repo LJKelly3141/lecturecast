@@ -67,3 +67,9 @@ test_that("out_dir in the settings is relative to the settings file and the argu
   expect_error(lecturecast_config(config = write_config(c("voice:", "  provider: edge", "video:", "  out_dir: 3"))),
                "out_dir")
 })
+
+test_that("the thumbnail slide defaults to 1 and must be a slide number", {
+  expect_equal(lecturecast_config(config = write_config("voice:\n  provider: edge"))$video$thumbnail, 1)
+  expect_equal(lecturecast_config(config = write_config("voice:\n  provider: edge\nvideo:\n  thumbnail: 4"))$video$thumbnail, 4)
+  expect_error(lecturecast_config(config = write_config("voice:\n  provider: edge\nvideo:\n  thumbnail: 0")), "slide number")
+})

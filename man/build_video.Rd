@@ -39,8 +39,14 @@ notes are still checked.}
 \item{quiet}{If \code{TRUE}, print only errors.}
 }
 \value{
-Invisibly, a list with the paths of the video, captions and
-transcript, and the video's duration in seconds.
+Invisibly, a list with the paths of the video, captions,
+transcript and chapter list, and the video's duration in seconds.
+The chapter list (\verb{<deck>-chapters.txt}) is in the form YouTube reads
+from a description: the first chapter at 0:00, each at least 10
+seconds, section dividers folded into the chapter after them. The
+thumbnail (\verb{<deck>-thumbnail.jpg}, 1280x720) is the finished state of
+the slide set by \verb{video: thumbnail:} (default 1, the title slide), or
+of the first slide built when that one is left out.
 }
 \description{
 Each slide's speaker notes are voiced with the provider set in

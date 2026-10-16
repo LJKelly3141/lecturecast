@@ -1,8 +1,9 @@
 #' Check which tools and keys lecturecast can find
 #'
 #' Reports whether Quarto, Chrome, FFmpeg, ffprobe, the `edge-tts` command
-#' and the `ELEVENLABS_API_KEY` environment variable are available. The key's
-#' value is never printed, only whether it is set.
+#' and the `ELEVENLABS_API_KEY`, `YT_CLIENT_ID` and `YT_CLIENT_SECRET`
+#' environment variables are available. Values are never printed, only
+#' whether they are set.
 #'
 #' @param quiet If `TRUE`, print nothing.
 #' @return Invisibly, a data frame with columns `item`, `found`, `detail` and
@@ -12,6 +13,7 @@
 #' lecturecast_check()
 lecturecast_check <- function(quiet = FALSE) {
   key_set <- nzchar(Sys.getenv("ELEVENLABS_API_KEY"))
+  yt_set <- nzchar(Sys.getenv("YT_CLIENT_ID")) && nzchar(Sys.getenv("YT_CLIENT_SECRET"))
   edge <- lc_find_edge_tts()
   rows <- list(
     lc_row("quarto", lc_find_tool("quarto"), "rendering decks"),
@@ -24,6 +26,12 @@ lecturecast_check <- function(quiet = FALSE) {
       found = key_set,
       detail = if (key_set) "set" else "not set",
       needed_for = "voice provider: elevenlabs"
+    ),
+    data.frame(
+      item = "YT_CLIENT_ID, YT_CLIENT_SECRET",
+      found = yt_set,
+      detail = if (yt_set) "set" else "not set",
+      needed_for = "youtube_upload()"
     )
   )
   out <- do.call(rbind, rows)

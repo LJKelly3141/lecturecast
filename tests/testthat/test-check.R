@@ -3,12 +3,13 @@ test_that("check reports every item without external tools", {
     lc_find_tool = function(tool) "",
     lc_find_chrome = function() ""
   )
-  withr::local_envvar(ELEVENLABS_API_KEY = "")
+  withr::local_envvar(ELEVENLABS_API_KEY = "", YT_CLIENT_ID = "", YT_CLIENT_SECRET = "")
   out <- lecturecast_check(quiet = TRUE)
   expect_s3_class(out, "data.frame")
   expect_equal(
     out$item,
-    c("quarto", "chrome", "ffmpeg", "ffprobe", "edge-tts", "ELEVENLABS_API_KEY")
+    c("quarto", "chrome", "ffmpeg", "ffprobe", "edge-tts", "ELEVENLABS_API_KEY",
+      "YT_CLIENT_ID, YT_CLIENT_SECRET")
   )
   expect_false(any(out$found))
 })
@@ -18,7 +19,7 @@ test_that("check finds tools that are present", {
     lc_find_tool = function(tool) paste0("/fake/bin/", tool),
     lc_find_chrome = function() "/fake/chrome"
   )
-  withr::local_envvar(ELEVENLABS_API_KEY = "sk_secret_value")
+  withr::local_envvar(ELEVENLABS_API_KEY = "sk_secret_value", YT_CLIENT_ID = "id", YT_CLIENT_SECRET = "secret")
   out <- lecturecast_check(quiet = TRUE)
   expect_true(all(out$found))
   expect_equal(out$detail[out$item == "edge-tts"], "/fake/bin/edge-tts")

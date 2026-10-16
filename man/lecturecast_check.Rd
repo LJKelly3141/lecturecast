@@ -15,8 +15,9 @@ Invisibly, a data frame with columns \code{item}, \code{found}, \code{detail} an
 }
 \description{
 Reports whether Quarto, Chrome, FFmpeg, ffprobe, the \code{edge-tts} command
-and the \code{ELEVENLABS_API_KEY} environment variable are available. The key's
-value is never printed, only whether it is set.
+and the \code{ELEVENLABS_API_KEY}, \code{YT_CLIENT_ID} and \code{YT_CLIENT_SECRET}
+environment variables are available. Values are never printed, only
+whether they are set.
 }
 \examples{
 lecturecast_check()

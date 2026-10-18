@@ -38,10 +38,19 @@ this skill is where drafting happens, and the instructor decides.
      in the narration ("AD falls"); keep those quotes exact, or convert them
      to tags.
    - A `---` line between parts of a slide's notes marks a fragment step.
-     Keep the same number of parts.
+     Keep the same number of parts. Leave a blank line above and below
+     each `---`, or Quarto reads it as YAML and the render fails ("Error
+     reading metadata").
+   - A button label may hold commas and apostrophes; tags match
+     `[play: Cook's distance]` and `[play: Extend to 7,000 pounds]`.
    - A slide with no notes must stay silent (`data-silent` or
      `video: silent:` in `lecturecast.yml`).
 5. **Do not shorten the teaching.** Split long sentences; keep every idea.
+   When drafting, don't repeat a content word or phrase across a sentence
+   break ("...this course. In this course..."). On a page the eye skips
+   over it; read aloud, the ear hears it as filler. Use a pronoun or a
+   different word. Key terms may recur; the back-to-back echo is the
+   problem.
 6. **Do not change quotations.** A sentence quoting the textbook is flagged
    but left as is unless the instructor chooses to paraphrase.
 7. **No em-dashes** in the narration.
@@ -56,7 +65,7 @@ this skill is where drafting happens, and the instructor decides.
 2. **Lint.** `lecturecast::lint_notes("<deck>.qmd")` returns one row per
    issue: `slide`, `title`, `issue`, `found`, `sentence`, `advice`.
    Issues: `symbol`, `abbreviation`, `link`, `acronym`, `room`,
-   `long sentence`, and the pacing checks `dead air`, `animation not cued`,
+   `long sentence`, `repetition`, and the pacing checks `dead air`, `animation not cued`,
    `static slide` and `static after animation` (see "Show, don't tell"
    below).
 3. **Draft the review file** (`<deck>-narration-review.md`): for each

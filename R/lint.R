@@ -98,6 +98,58 @@ lc_visual_changes <- function(text, buttons, n_fragments = 0L) {
   list(at = at[o], kind = kind[o], uncued = unique(labels[playable & !keys %in% quoted]), unknown = unknown)
 }
 
+# Content words said at the end of one sentence and again at the start of
+# the next. Words of four letters or more, apart from common function words
+# and the slide title's own words (a slide about sticky wages may say
+# "wages" often), are compared by a rough stem, so "course" and "courses"
+# match.
+lc_repeat_stop <- c(
+  "about", "after", "again", "also", "back", "because", "been", "before", "being", "both", "come", "could",
+  "does", "doing", "done", "down", "each", "even", "every", "first", "from", "going", "good", "have", "here",
+  "into", "just", "know", "like", "look", "make", "many", "more", "most", "much", "must", "next", "only",
+  "other", "over", "same", "says", "should", "show", "shows", "some", "still", "such", "take", "than", "that",
+  "that's", "their", "them", "then", "there", "there's", "these", "they", "they're", "thing", "things", "this",
+  "those", "through", "time", "under", "very", "want", "well", "were", "what", "what's", "when", "where",
+  "which", "while", "will", "with", "would", "your", "you're", "you'll", "you've", "it's", "here's", "let's"
+)
+
+lc_stem <- function(w) {
+  w <- sub("'s$", "", w)
+  w <- sub("ies$", "y", w)
+  w <- ifelse(grepl("ss$", w), w, sub("s$", "", w))
+  w <- ifelse(nchar(w) >= 6, sub("(ing|ed)$", "", w), w)
+  w
+}
+
+# Every word of a sentence, and which are content words (with their stems).
+lc_words <- function(x) {
+  x <- gsub("[\u2018\u2019]", "'", tolower(x))
+  w <- regmatches(x, gregexpr("[a-z0-9]+('[a-z]+)?", x))[[1]]
+  content <- nchar(w) >= 4 & !w %in% lc_repeat_stop & !grepl("^[0-9]", w)
+  data.frame(word = w, stem = lc_stem(w), content = content, stringsAsFactors = FALSE)
+}
+
+lc_content_stems <- function(x) {
+  w <- lc_words(x)
+  stats::setNames(w$stem[w$content], w$word[w$content])
+}
+
+# A repeat the ear catches: the same content word close on both sides of the
+# sentence break, fewer than `gap` words apart (as in "...this course. In this course").
+lc_repeated_words <- function(prev, cur, title = "", gap = 5) {
+  a <- lc_words(prev)
+  b <- lc_words(cur)
+  skip <- lc_content_stems(title)
+  a$dist <- nrow(a) - seq_len(nrow(a))
+  b$dist <- seq_len(nrow(b)) - 1
+  hits <- character(0)
+  for (k in which(b$content & !b$stem %in% skip)) {
+    m <- which(a$content & a$stem == b$stem[k])
+    if (length(m) && min(a$dist[m]) + b$dist[k] < gap) hits <- c(hits, b$word[k])
+  }
+  unique(hits)
+}
+
 # Stretches of narration with nothing changing on screen, one per gap
 # between changes: words, the text that starts it, and which change it
 # follows (0 for the start of the slide, k for the k-th change).
@@ -116,7 +168,7 @@ lc_still_stretches <- function(text, at) {
 # One row per issue in a set of slides from lc_read_slides(). `max_still` is
 # the longest the picture may sit unchanged, in seconds, estimated at
 # `words_per_second` (Edge voices speak at roughly 2.6).
-lc_lint_slides <- function(slides, max_words = 30, max_still = 30, words_per_second = 2.6) {
+lc_lint_slides <- function(slides, max_words = 30, max_still = 30, words_per_second = 2.6, repeat_gap = 5) {
   rows <- list()
   add <- function(s, issue, found, sentence, advice) {
     rows[[length(rows) + 1]] <<- data.frame(slide = s$index, title = lc_title(s), issue = issue,
@@ -163,6 +215,18 @@ lc_lint_slides <- function(slides, max_words = 30, max_still = 30, words_per_sec
                  "play a chart step with a [play: label] tag, or split the slide."))
     }
     text <- gsub("\n\\s*(---|\\|)\\s*\n", "\n\n", gsub(lc_tag_regex, "", raw, perl = TRUE))
+    # Repeats count within a fragment step; a new step is a new moment.
+    steps <- strsplit(gsub(lc_tag_regex, "", raw, perl = TRUE), "\n\\s*(---|\\|)\\s*\n")[[1]]
+    for (step_text in if (repeat_gap > 0) steps else character(0)) {
+      st_sents <- lc_sentences(step_text)
+      for (k in seq_along(st_sents)[-1]) {
+        rep_words <- lc_repeated_words(st_sents[k - 1], st_sents[k], s$title, repeat_gap)
+        if (length(rep_words)) {
+          add(s, "repetition", paste(rep_words, collapse = " "), st_sents[k],
+              "The listener hears this twice in a row. Drop the repeat, or use a pronoun or a different word.")
+        }
+      }
+    }
     for (sent in lc_sentences(text)) {
       for (issue in names(lc_lint_rules)) {
         r <- lc_lint_rules[[issue]]
@@ -197,7 +261,8 @@ lc_lint_slides <- function(slides, max_words = 30, max_still = 30, words_per_sec
 #' stumble on: symbols and subscripts, abbreviations such as "e.g.", web
 #' addresses, economics and statistics abbreviations such as "SRAS" (with
 #' the words to say instead), phrases written for the live room ("the room
-#' can see", "click"), long sentences, and the pacing of the picture: slides
+#' can see", "click"), long sentences, a content word repeated across a
+#' sentence break ("...this course. In this course..."), and the pacing of the picture: slides
 #' with no narration (dead air), chart buttons the notes never play,
 #' stretches of narration over a slide that does not change, and narration
 #' that walks through an animation's steps after it has finished playing. Nothing is changed; edit the notes in the
@@ -211,11 +276,15 @@ lc_lint_slides <- function(slides, max_words = 30, max_still = 30, words_per_sec
 #' @param max_still Report a slide when its picture would sit unchanged for
 #'   longer than this many seconds of narration, estimated from the word
 #'   count. Fragment steps and cued chart buttons count as changes.
+#' @param repeat_gap Report a content word said at the end of one sentence
+#'   and again at the start of the next, fewer than this many words apart
+#'   across the break ("...this course. In this course..."). Words in the
+#'   slide's title are left out. `0` turns the check off.
 #' @param quiet If `TRUE`, print nothing.
 #' @return Invisibly, a data frame with one row per issue and columns `slide`,
 #'   `title`, `issue`, `found`, `sentence` and `advice`.
 #' @export
-lint_notes <- function(deck, max_words = 30, max_still = 30, quiet = FALSE) {
+lint_notes <- function(deck, max_words = 30, max_still = 30, repeat_gap = 5, quiet = FALSE) {
   deck <- lc_check_deck(deck)
   if (!is.numeric(max_words) || length(max_words) != 1 || is.na(max_words) || max_words < 1) {
     lc_abort("lint notes", "max_words must be a positive number.")
@@ -223,9 +292,12 @@ lint_notes <- function(deck, max_words = 30, max_still = 30, quiet = FALSE) {
   if (!is.numeric(max_still) || length(max_still) != 1 || is.na(max_still) || max_still <= 0) {
     lc_abort("lint notes", "max_still must be a positive number of seconds.")
   }
+  if (!is.numeric(repeat_gap) || length(repeat_gap) != 1 || is.na(repeat_gap) || repeat_gap < 0) {
+    lc_abort("lint notes", "repeat_gap must be a number of words (0 turns the check off).")
+  }
   b <- lc_open_deck(deck, 1280L, 720L)
   on.exit(try(b$close(), silent = TRUE), add = TRUE)
-  out <- lc_lint_slides(lc_read_slides(b, deck), max_words, max_still)
+  out <- lc_lint_slides(lc_read_slides(b, deck), max_words, max_still, repeat_gap = repeat_gap)
   if (!quiet) lc_print_lint(out)
   invisible(out)
 }

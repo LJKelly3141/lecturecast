@@ -4,7 +4,7 @@
 \alias{lint_notes}
 \title{Find speaker notes that will read badly aloud}
 \usage{
-lint_notes(deck, max_words = 30, max_still = 30, quiet = FALSE)
+lint_notes(deck, max_words = 30, max_still = 30, repeat_gap = 5, quiet = FALSE)
 }
 \arguments{
 \item{deck}{Path to the deck's \code{.qmd}, or to its rendered reveal.js \code{.html}.
@@ -17,6 +17,11 @@ lecturecast never renders, so a missing or out-of-date render stops.}
 longer than this many seconds of narration, estimated from the word
 count. Fragment steps and cued chart buttons count as changes.}
 
+\item{repeat_gap}{Report a content word said at the end of one sentence
+and again at the start of the next, fewer than this many words apart
+across the break ("...this course. In this course..."). Words in the
+slide's title are left out. \code{0} turns the check off.}
+
 \item{quiet}{If \code{TRUE}, print nothing.}
 }
 \value{
@@ -28,7 +33,8 @@ Reads the rendered deck's speaker notes and reports what a listener will
 stumble on: symbols and subscripts, abbreviations such as "e.g.", web
 addresses, economics and statistics abbreviations such as "SRAS" (with
 the words to say instead), phrases written for the live room ("the room
-can see", "click"), long sentences, and the pacing of the picture: slides
+can see", "click"), long sentences, a content word repeated across a
+sentence break ("...this course. In this course..."), and the pacing of the picture: slides
 with no narration (dead air), chart buttons the notes never play,
 stretches of narration over a slide that does not change, and narration
 that walks through an animation's steps after it has finished playing. Nothing is changed; edit the notes in the

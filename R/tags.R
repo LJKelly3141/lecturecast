@@ -4,7 +4,9 @@
 # narration waits for it to finish before going on. [play: AD falls, over]
 # lets the narration carry on while the chart plays.
 
-lc_tag_regex <- "(?i)\\[\\s*play\\s*:\\s*([^\\]\\n,]+?)\\s*(,\\s*over\\s*)?\\]"
+# A label may hold commas ("7,000 pounds"); only a final ", over" is the
+# modifier.
+lc_tag_regex <- "(?i)\\[\\s*play\\s*:\\s*([^\\]\\n]+?)\\s*(,\\s*over\\s*)?\\]"
 
 # Split a segment's text at its tags. Returns the spoken text (tags
 # removed), the pieces between tags (one more than the tags, possibly

@@ -25,6 +25,11 @@ voice-over and broadcast writing agree on a few rules:
   written connectives such as "thus" and "moreover".
 - **One idea per sentence.** If a sentence carries two ideas, split it. Vary
   the length so the narration does not sound clipped.
+- **Don't repeat a word across a sentence break.** "...by the end of this
+  course. In this course, you'll..." On a page the eye skips the repeat;
+  read aloud, the ear hears it as filler. Drop it, or use a pronoun or a
+  different word. Key terms can still recur; it's the back-to-back echo
+  that grates.
 - **Picture one listener.** Talk to a single student, not to a room.
 - **Say symbols and abbreviations in full.** Write "for example" rather than
   "e.g.", "percent" rather than "%", and "A D one" rather than "AD₁". Voice
@@ -60,6 +65,8 @@ explain the step, so the viewer sees the whole and then each part.
 - **Fragments.** On a slide with fragments, put a line holding only `---`
   before each fragment's narration. The notes then need one part more than
   the slide has fragments: the first part plays before any fragment appears.
+  Leave a blank line above and below each `---`; without them Quarto reads
+  it as YAML and the render stops with "Error reading metadata".
 - **Animated charts.** A play tag names a chart button on the slide and marks
   exactly where it plays: `Watch demand fall. [play: AD falls] Output drops.`
   The voice never reads the tag. The narration is voiced in pieces split at
@@ -96,6 +103,7 @@ It reports:
 | acronym | SRAS, AD, MPC, SE, CI, OLS and other economics and statistics abbreviations, with the words to say |
 | room | "the room", "in class", "click", "your neighbor" |
 | long sentence | more than `max_words` words (30 by default) |
+| repetition | a content word at the end of one sentence and the start of the next, fewer than `repeat_gap` words apart (5 by default); words in the slide title are left out |
 | dead air | a slide with nothing said, including the title slide |
 | animation not cued | a chart button the notes never play, so it never moves |
 | unknown tag | a `[play: ...]` tag naming no button on the slide |

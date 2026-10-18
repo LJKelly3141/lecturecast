@@ -74,3 +74,18 @@ test_that("lint_notes counts tags as changes and reports unknown labels", {
   slides$notes <- "Go. [play: Pause] Done."
   expect_equal(lc_lint_slides(slides)$issue, c("unknown tag", "animation not cued"))
 })
+
+test_that("a label may hold a comma; only a final \", over\" is the modifier", {
+  p <- lc_parse_tags("Now extend it. [play: Extend to 7,000 pounds] It keeps rising. [play: 5,000 rows, over] Done.")
+  expect_equal(p$tags$label, c("Extend to 7,000 pounds", "5,000 rows"))
+  expect_equal(p$tags$over, c(FALSE, TRUE))
+  expect_false(grepl("play", p$text))
+})
+
+test_that("curly and straight apostrophes match", {
+  buttons <- data.frame(plot = 0L, menu = 0L, button = 1L, label = "Cook's distance", stringsAsFactors = FALSE)
+  tags <- lc_parse_tags("Look. [play: Cook’s distance] There.")$tags
+  ev <- lc_tag_events(tags, buttons, 3, "Influence", "d")
+  expect_equal(ev$label, "Cook's distance")
+  expect_equal(lc_label_key("“Tariff”"), lc_label_key("\"Tariff\""))
+})

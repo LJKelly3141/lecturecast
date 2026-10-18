@@ -115,29 +115,59 @@ test_that("chart buttons the narration never quotes are reported", {
   expect_equal(out$found[out$issue == "animation not cued"], "\"AD rises\"")
 })
 
+# The pacing tests repeat one filler sentence, so they set repetition aside.
+lint_pacing <- function(...) {
+  out <- lc_lint_slides(...)
+  out[out$issue != "repetition", ]
+}
+
 test_that("a long stretch of narration over an unchanging picture is reported", {
   long <- paste(rep("This sentence explains the idea at some length for listeners.", 12), collapse = " ")
-  out <- lc_lint_slides(fake_slides(long))
+  out <- lint_pacing(fake_slides(long))
   expect_equal(out$issue, "static slide")
   expect_match(out$found, "about 46 s unchanged")
   expect_match(out$advice, "Show, don't just tell")
   half <- paste(rep("This sentence explains the idea at some length for listeners.", 6), collapse = " ")
   cued <- with_buttons(fake_slides(paste(half, "Now \"Play\" it.", half)), 1, "Play")
-  expect_false("static slide" %in% lc_lint_slides(cued)$issue)
+  expect_false("static slide" %in% lint_pacing(cued)$issue)
   stepped <- fake_slides(paste0(half, "\n\n---\n\n", half), n_fragments = 1L)
-  expect_false("static slide" %in% lc_lint_slides(stepped)$issue)
+  expect_false("static slide" %in% lint_pacing(stepped)$issue)
   unstepped <- fake_slides(paste0(half, "\n\n---\n\n", half))
-  expect_true("static slide" %in% lc_lint_slides(unstepped)$issue)
-  expect_false("static slide" %in% lc_lint_slides(fake_slides(long), max_still = 60)$issue)
+  expect_true("static slide" %in% lint_pacing(unstepped)$issue)
+  expect_false("static slide" %in% lint_pacing(fake_slides(long), max_still = 60)$issue)
 })
 
 
 test_that("walking through an animation after it plays asks for step buttons", {
   half <- paste(rep("This sentence explains the idea at some length for listeners.", 9), collapse = " ")
   slides <- with_buttons(fake_slides(paste("Now \"Tariff\" plays all three steps.", half)), 1, c("Start", "Tariff"))
-  out <- lc_lint_slides(slides)
+  out <- lint_pacing(slides)
   expect_equal(out$issue, "static after animation")
   expect_match(out$advice, "a button for each step")
   before <- with_buttons(fake_slides(paste(half, "Now \"Tariff\" plays.")), 1, c("Start", "Tariff"))
-  expect_equal(lc_lint_slides(before)$issue, "static slide")
+  expect_equal(lint_pacing(before)$issue, "static slide")
+})
+
+test_that("a content word in back-to-back sentences is a repetition", {
+  slides <- fake_slides(c(
+    "This is what you will learn by the end of this course. In this course, you will work with real data.",
+    "Sticky wages slow the recovery. Wages are sticky because of contracts.",
+    "Demand falls. Falling demand cuts output. Output then recovers."
+  ), titles = c("Welcome", "Sticky wages", "A shock"))
+  out <- lc_lint_slides(slides)
+  r <- out[out$issue == "repetition", ]
+  expect_equal(r$slide, c(1L, 3L, 3L))
+  expect_equal(r$found, c("course", "falling demand", "output"))
+  expect_match(r$advice[1], "twice in a row")
+})
+
+test_that("function words and words far apart are not repetitions", {
+  expect_equal(lc_repeated_words("They would rather wait.", "They would not."), character(0))
+  slides <- fake_slides("Prices rise. Then output falls. Later, prices settle.")
+  expect_false("repetition" %in% lc_lint_slides(slides)$issue)
+  far <- fake_slides("Demand drives output in the short run, said Keynes. Over a decade, though, demand matters less.")
+  expect_false("repetition" %in% lc_lint_slides(far)$issue)
+  near <- fake_slides("By the end of this course. In this course, you will work.")
+  expect_true("repetition" %in% lc_lint_slides(near)$issue)
+  expect_false("repetition" %in% lc_lint_slides(near, repeat_gap = 0)$issue)
 })

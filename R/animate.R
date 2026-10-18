@@ -18,7 +18,13 @@ lc_quotes <- function(text) {
 }
 
 # Labels and quotes compare without case or trailing punctuation.
-lc_label_key <- function(x) tolower(trimws(sub("[.,;:!?]+$", "", trimws(x))))
+# Labels match with case, end punctuation and curly quotes aside: Quarto
+# makes the notes' apostrophes curly, but not a chart's button labels.
+lc_label_key <- function(x) {
+  x <- gsub("[\u2018\u2019\u201b\u2032]", "'", x)
+  x <- gsub("[\u201c\u201d\u201f\u2033]", "\"", x)
+  tolower(trimws(sub("[.,;:!?]+$", "", trimws(x))))
+}
 
 # Buttons to play in one segment: quoted phrases matching a button label on
 # the slide, case aside, in order. Only the first mention of a label on a

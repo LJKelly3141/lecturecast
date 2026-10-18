@@ -163,17 +163,25 @@ lc_deck_title <- function(b, deck) {
 }
 
 # Hide the on-screen controls and turn off transitions so each capture is
-# the finished slide.
-lc_prepare_capture <- function(b, deck) {
-  js <- "(() => {
-    Reveal.configure({controls: false, progress: false, slideNumber: false,
+# the finished slide. The slide number stays only when slide_number is set:
+# TRUE keeps the deck's own format, a string such as "c/t" sets one. Reveal
+# counts slides, not fragment steps, so the number matches the HTML deck.
+lc_prepare_capture <- function(b, deck, slide_number = FALSE) {
+  sn <- if (isFALSE(slide_number)) "false"
+        else if (isTRUE(slide_number)) "(typeof Reveal.getConfig().slideNumber === 'string' ? Reveal.getConfig().slideNumber : true)"
+        else sprintf("'%s'", slide_number)
+  hide <- c(".slide-menu-button", ".reveal .controls", ".reveal .progress",
+            if (isFALSE(slide_number)) ".slide-number",
+            ".slide-chalkboard-buttons", ".quarto-toc-toggle")
+  js <- sprintf("(() => {
+    Reveal.configure({controls: false, progress: false, slideNumber: %s, showSlideNumber: 'all',
                       transition: 'none', backgroundTransition: 'none',
                       autoSlide: 0, help: false});
     const st = document.createElement('style');
-    st.textContent = '.slide-menu-button, .reveal .controls, .reveal .progress, .slide-number, .slide-chalkboard-buttons, .quarto-toc-toggle { display: none !important; } * { cursor: none !important; }';
+    st.textContent = '%s { display: none !important; } * { cursor: none !important; }';
     document.head.appendChild(st);
     return true;
-  })()"
+  })()", sn, paste(hide, collapse = ", "))
   lc_js(b, js, "capture", deck)
   invisible(TRUE)
 }

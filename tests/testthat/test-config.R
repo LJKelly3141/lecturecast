@@ -73,3 +73,12 @@ test_that("the thumbnail slide defaults to 1 and must be a slide number", {
   expect_equal(lecturecast_config(config = write_config("voice:\n  provider: edge\nvideo:\n  thumbnail: 4"))$video$thumbnail, 4)
   expect_error(lecturecast_config(config = write_config("voice:\n  provider: edge\nvideo:\n  thumbnail: 0")), "slide number")
 })
+
+test_that("slide numbers are off by default and take true, false or a reveal format", {
+  sn <- function(x) lecturecast_config(config = write_config(c("voice:", "  provider: edge", "video:", x)))$video$slide_number
+  expect_false(lecturecast_config(config = write_config("voice:\n  provider: edge"))$video$slide_number)
+  expect_true(sn("  slide_number: true"))
+  expect_equal(sn("  slide_number: c/t"), "c/t")
+  expect_error(sn("  slide_number: page"), "slide_number")
+  expect_error(sn("  slide_number: 3"), "slide_number")
+})

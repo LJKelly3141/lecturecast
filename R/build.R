@@ -69,7 +69,7 @@ build_video <- function(deck, config = NULL, out_dir = NULL, work_dir = NULL,
 
   voice <- lc_prepare_voice(cfg, segs, name, cache)
 
-  lc_prepare_capture(b, deck)
+  lc_prepare_capture(b, deck, cfg$video$slide_number)
   segs$png <- file.path(work, "png", paste0(segs$id, ".png"))
   # Each segment's still, then any animations its notes cue, in narration
   # order, so a later segment on the same slide starts from where the

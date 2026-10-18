@@ -62,7 +62,8 @@ without the instructor's yes for that upload.
    Nothing is sent. Show the instructor the thumbnail image too
    (`<deck>-thumbnail.jpg`, the title slide unless `video: thumbnail:` in
    `lecturecast.yml` names another slide; `thumbnail = "<file>"` uses their
-   own image). Custom thumbnails need a verified channel. Show it to the instructor.
+   own image, such as one made with Codex; see "A generated thumbnail").
+   Custom thumbnails need a verified channel. Show it to the instructor.
 3. **Upload** with the same call and `dry_run = FALSE`, only after the yes.
    Report the link (`https://youtu.be/<id>`) and what was done.
 4. **If it stops partway** (network, quota), run the same call again: the
@@ -86,3 +87,37 @@ next), a section divider (`#` heading) folded into the slide after it, the
 title slide named "Introduction", and slides that share a title in a row
 joined. The chapter titles are the slide titles, so good slide titles make
 good chapters. YouTube shows chapters only when there are at least three.
+
+## A generated thumbnail
+
+Only when the instructor asks for one. The package never calls an image
+model; Codex makes the image, and it goes to `youtube_upload()` as a file.
+
+1. **Agree the brief first.** Propose the words on the image (the lecture
+   title, short) and the idea for the picture, from the deck. Get a yes
+   before generating: each run uses the instructor's OpenAI allowance.
+2. **Generate** into the build folder, never into the course source:
+   ```sh
+   codex exec --skip-git-repo-check -s workspace-write -C build/video \
+     -i build/video/<deck>-thumbnail.jpg \
+     "Use your image generation tool to make a 16:9 YouTube thumbnail for a
+      lecture titled '<approved words>'. <approved idea>. Bold short title
+      text, flat illustration, no logos, no real people, no other text.
+      Save it in this folder as <deck>-thumbnail-ai.png and reply with its path."
+   ```
+   `-i` passes the built thumbnail for its colours and layout; leave it out
+   for a free design. It takes about a minute.
+3. **Fit it to YouTube's size** (1280x720 JPEG, under 2 MB):
+   ```sh
+   ffmpeg -y -i build/video/<deck>-thumbnail-ai.png \
+     -vf "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:white" \
+     -q:v 2 build/video/<deck>-thumbnail-ai.jpg
+   ```
+4. **Show the image** and check the spelling of every word on it, since
+   image models misspell. The instructor approves it, asks for another
+   (say what to change), or keeps the built one.
+5. Pass the approved file: `thumbnail = "build/video/<deck>-thumbnail-ai.jpg"`
+   in the dry run and the upload.
+
+No real people, logos, or anything that looks like a real photo. The
+thumbnail must not promise content the lecture does not have.

@@ -54,6 +54,8 @@ build_video("slides/week7.qmd")
 
 `build_video()` takes the deck's `.qmd` or its rendered `.html`. Given a `.qmd`, it finds the render through the project's `_quarto.yml` and stops if the render is missing or older than the `.qmd`. A slide without notes must be marked silent, with a length in seconds, in `lecturecast.yml` or with `data-silent` on the slide. To build only some slides, for a test, use `build_video("slides/week7.qmd", slides = 1:5)`.
 
+The video hides the deck's controls, progress bar, menu and slide number. To keep the slide number, so students can name the slide they are asking about, set `video: slide_number: true` in `lecturecast.yml` (the deck's own format) or a reveal.js format such as `"c/t"`. The number counts slides as the HTML deck does, so it does not change on a fragment step.
+
 Before building, check that the notes read well aloud:
 
 ```r

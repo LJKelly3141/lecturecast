@@ -73,6 +73,7 @@ lc_config_defaults <- function(raw) {
       card_seconds = video$card_seconds %||% 4,
       silent = video$silent %||% list(),
       thumbnail = video$thumbnail %||% 1,
+      slide_number = video$slide_number %||% FALSE,
       out_dir = video$out_dir
     ),
     podcast = list(
@@ -86,6 +87,10 @@ lc_config_defaults <- function(raw) {
     )
   )
 }
+
+# Reveal's slide number formats: h.v and h/v count horizontal and vertical
+# slides, c is one running count, c/t adds the total.
+lc_slide_number_formats <- c("h.v", "h/v", "c", "c/t")
 
 # A card setting is false, true, or a list of title and subtitle text.
 lc_card_setting <- function(x) {
@@ -137,6 +142,11 @@ lc_config_validate <- function(cfg, path) {
   th <- cfg$video$thumbnail
   if (!is.numeric(th) || length(th) != 1 || is.na(th) || th < 1 || th != round(th)) {
     lc_abort(step, "video: thumbnail: must be a slide number (1 = the title slide).", file = path)
+  }
+  sn <- cfg$video$slide_number
+  if (!(isTRUE(sn) || isFALSE(sn) || (is.character(sn) && length(sn) == 1 && sn %in% lc_slide_number_formats))) {
+    lc_abort(step, paste0("video: slide_number: must be true, false, or one of ",
+                          paste0("\"", lc_slide_number_formats, "\"", collapse = ", "), "."), file = path)
   }
   if (!is.numeric(cfg$podcast$gap) || length(cfg$podcast$gap) != 1 || cfg$podcast$gap < 0) {
     lc_abort(step, "podcast: gap: must be a number of seconds.", file = path)

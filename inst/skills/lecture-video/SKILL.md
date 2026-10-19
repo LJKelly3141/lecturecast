@@ -50,7 +50,9 @@ this skill is where drafting happens, and the instructor decides.
    break ("...this course. In this course..."). On a page the eye skips
    over it; read aloud, the ear hears it as filler. Use a pronoun or a
    different word. Key terms may recur; the back-to-back echo is the
-   problem.
+   problem. The same goes for a word said twice inside one sentence
+   ("counts each bin, and draws the counts"). Lint flags both; a deliberate
+   parallel ("sticky wages and sticky prices") can stay.
 6. **Do not change quotations.** A sentence quoting the textbook is flagged
    but left as is unless the instructor chooses to paraphrase.
 7. **No em-dashes** in the narration.

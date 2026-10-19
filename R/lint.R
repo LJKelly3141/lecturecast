@@ -150,6 +150,25 @@ lc_repeated_words <- function(prev, cur, title = "", gap = 5) {
   unique(hits)
 }
 
+# Number words come back in spoken numbers ("twenty-two point three to
+# thirty-six point four"), so they never count as repeats in one sentence.
+lc_number_words <- c(
+  "zero", "three", "seven", "eight", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
+  "seventeen", "eighteen", "nineteen", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty",
+  "ninety", "hundred", "thousand", "million", "billion", "trillion", "point", "percent", "half", "halves",
+  "quarter", "third", "fourth", "fifth", "tenth", "minus", "times"
+)
+
+# A content word of five letters or more said twice in one sentence (as in
+# "counts each bin, and draws the counts"), compared by stem. Quoted text,
+# such as a button or book title, is left out.
+lc_repeated_within <- function(sentence) {
+  x <- gsub("\"[^\"]*\"|\u201c[^\u201d]*\u201d", " ", sentence)
+  w <- lc_words(x)
+  w <- w[w$content & nchar(sub("'s$", "", w$word)) >= 5 & !w$stem %in% lc_stem(lc_number_words), ]
+  unique(w$word[duplicated(w$stem)])
+}
+
 # Stretches of narration with nothing changing on screen, one per gap
 # between changes: words, the text that starts it, and which change it
 # follows (0 for the start of the slide, k for the k-th change).
@@ -219,6 +238,13 @@ lc_lint_slides <- function(slides, max_words = 30, max_still = 30, words_per_sec
     steps <- strsplit(gsub(lc_tag_regex, "", raw, perl = TRUE), "\n\\s*(---|\\|)\\s*\n")[[1]]
     for (step_text in if (repeat_gap > 0) steps else character(0)) {
       st_sents <- lc_sentences(step_text)
+      for (sent in st_sents) {
+        rep_words <- lc_repeated_within(sent)
+        if (length(rep_words)) {
+          add(s, "repetition", paste(rep_words, collapse = " "), sent,
+              "The listener hears this word twice in one sentence. Use a pronoun or a different word, or rephrase. A deliberate parallel can stay.")
+        }
+      }
       for (k in seq_along(st_sents)[-1]) {
         rep_words <- lc_repeated_words(st_sents[k - 1], st_sents[k], s$title, repeat_gap)
         if (length(rep_words)) {
@@ -262,7 +288,8 @@ lc_lint_slides <- function(slides, max_words = 30, max_still = 30, words_per_sec
 #' addresses, economics and statistics abbreviations such as "SRAS" (with
 #' the words to say instead), phrases written for the live room ("the room
 #' can see", "click"), long sentences, a content word repeated across a
-#' sentence break ("...this course. In this course..."), and the pacing of the picture: slides
+#' sentence break ("...this course. In this course...") or within one
+#' sentence ("counts each bin, and draws the counts"), and the pacing of the picture: slides
 #' with no narration (dead air), chart buttons the notes never play,
 #' stretches of narration over a slide that does not change, and narration
 #' that walks through an animation's steps after it has finished playing. Nothing is changed; edit the notes in the
@@ -279,7 +306,9 @@ lc_lint_slides <- function(slides, max_words = 30, max_still = 30, words_per_sec
 #' @param repeat_gap Report a content word said at the end of one sentence
 #'   and again at the start of the next, fewer than this many words apart
 #'   across the break ("...this course. In this course..."). Words in the
-#'   slide's title are left out. `0` turns the check off.
+#'   slide's title are left out. A content word of five letters or more said
+#'   twice in one sentence is reported too, apart from number words
+#'   ("twenty", "point") and quoted text. `0` turns both checks off.
 #' @param quiet If `TRUE`, print nothing.
 #' @return Invisibly, a data frame with one row per issue and columns `slide`,
 #'   `title`, `issue`, `found`, `sentence` and `advice`.

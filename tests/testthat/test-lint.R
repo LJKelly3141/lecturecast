@@ -19,7 +19,7 @@ test_that("each kind of issue is found and named", {
 })
 
 test_that("clean notes and ordinary words pass", {
-  slides <- fake_slides(c("When spending falls, output falls with it.",
+  slides <- fake_slides(c("When spending falls, output drops with it.",
                           "Real GDP and the price level move together. The classroom example still works."))
   expect_equal(nrow(lc_lint_slides(slides)), 0)
 })
@@ -170,4 +170,41 @@ test_that("function words and words far apart are not repetitions", {
   near <- fake_slides("By the end of this course. In this course, you will work.")
   expect_true("repetition" %in% lc_lint_slides(near)$issue)
   expect_false("repetition" %in% lc_lint_slides(near, repeat_gap = 0)$issue)
+})
+
+test_that("a content word said twice in one sentence is a repetition", {
+  said <- c(
+    "This one is about the shape of the data: what a single average hides, and the charts that show what it hides.",
+    "A histogram sorts the values into bins of equal width, counts each bin, and draws the counts as bars.",
+    "Every two weeks, the Census Bureau asks firms whether they used artificial intelligence in the last two weeks.",
+    "Florida’s is narrow: the survey pins Florida down closely.",
+    "Wilke explains that a proper comparison works with the difference itself, and the uncertainty of that difference."
+  )
+  expect_equal(lapply(said, lc_repeated_within), list("hides", "counts", "weeks", "florida", "difference"))
+  out <- lc_lint_slides(fake_slides(said[1]))
+  expect_equal(out$issue, "repetition")
+  expect_match(out$advice, "twice in one sentence")
+  expect_equal(nrow(lc_lint_slides(fake_slides(said[1]), repeat_gap = 0)), 0)
+})
+
+test_that("spoken numbers, quoted labels and short words are not repetitions in a sentence", {
+  expect_equal(lc_repeated_within("It rose from twenty-two point three to thirty-six point four percent, then forty point one percent."),
+               character(0))
+  expect_equal(lc_repeated_within("Press \"Show values\" and the values appear."), character(0))
+  expect_equal(lc_repeated_within("The data fit, and the data agree."), character(0))
+})
+
+test_that("a deck's title-slide notes are linted", {
+  skip_on_cran()
+  skip_on_ci()
+  skip_if(!nzchar(Sys.which("quarto")), "Quarto not installed")
+  skip_if(!nzchar(lc_find_chrome()), "Chrome not found")
+  dir <- withr::local_tempdir()
+  writeLines(c("---", "title: \"Shape\"", "format: revealjs", "title-slide-attributes:",
+               "  data-notes: \"This is about what an average hides, and the charts that show what it hides.\"",
+               "---", "", "## One", "", "::: notes", "Plain words here.", ":::"), file.path(dir, "ts.qmd"))
+  processx::run("quarto", c("render", "ts.qmd"), wd = dir)
+  out <- lint_notes(file.path(dir, "ts.html"), quiet = TRUE)
+  expect_equal(out$slide, 1L)
+  expect_equal(out$found, "hides")
 })

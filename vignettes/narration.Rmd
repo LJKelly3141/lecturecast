@@ -29,7 +29,9 @@ voice-over and broadcast writing agree on a few rules:
   course. In this course, you'll..." On a page the eye skips the repeat;
   read aloud, the ear hears it as filler. Drop it, or use a pronoun or a
   different word. Key terms can still recur; it's the back-to-back echo
-  that grates.
+  that grates. The same goes for a word said twice in one sentence: "A
+  histogram counts each bin and draws the counts as bars" reads as "draws
+  them as bars". A deliberate parallel can stay.
 - **Picture one listener.** Talk to a single student, not to a room.
 - **Say symbols and abbreviations in full.** Write "for example" rather than
   "e.g.", "percent" rather than "%", and "A D one" rather than "AD₁". Voice
@@ -103,7 +105,7 @@ It reports:
 | acronym | SRAS, AD, MPC, SE, CI, OLS and other economics and statistics abbreviations, with the words to say |
 | room | "the room", "in class", "click", "your neighbor" |
 | long sentence | more than `max_words` words (30 by default) |
-| repetition | a content word at the end of one sentence and the start of the next, fewer than `repeat_gap` words apart (5 by default); words in the slide title are left out |
+| repetition | a content word at the end of one sentence and the start of the next, fewer than `repeat_gap` words apart (5 by default); words in the slide title are left out; or a content word of five letters or more said twice in one sentence, apart from number words and quoted text |
 | dead air | a slide with nothing said, including the title slide |
 | animation not cued | a chart button the notes never play, so it never moves |
 | unknown tag | a `[play: ...]` tag naming no button on the slide |

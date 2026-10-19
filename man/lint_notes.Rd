@@ -20,7 +20,9 @@ count. Fragment steps and cued chart buttons count as changes.}
 \item{repeat_gap}{Report a content word said at the end of one sentence
 and again at the start of the next, fewer than this many words apart
 across the break ("...this course. In this course..."). Words in the
-slide's title are left out. \code{0} turns the check off.}
+slide's title are left out. A content word of five letters or more said
+twice in one sentence is reported too, apart from number words
+("twenty", "point") and quoted text. \code{0} turns both checks off.}
 
 \item{quiet}{If \code{TRUE}, print nothing.}
 }
@@ -34,7 +36,8 @@ stumble on: symbols and subscripts, abbreviations such as "e.g.", web
 addresses, economics and statistics abbreviations such as "SRAS" (with
 the words to say instead), phrases written for the live room ("the room
 can see", "click"), long sentences, a content word repeated across a
-sentence break ("...this course. In this course..."), and the pacing of the picture: slides
+sentence break ("...this course. In this course...") or within one
+sentence ("counts each bin, and draws the counts"), and the pacing of the picture: slides
 with no narration (dead air), chart buttons the notes never play,
 stretches of narration over a slide that does not change, and narration
 that walks through an animation's steps after it has finished playing. Nothing is changed; edit the notes in the

@@ -76,15 +76,22 @@ test_that("a background setting and a manim.cfg beside the scene stop the build"
 
 test_that("the box is rounded to even pixels and kept on screen", {
   b <- lc_manim_box(list(x = 101.4, y = 50.6, w = 801.2, h = 451), c(1920L, 1080L), 1, "d.html")
-  expect_equal(unname(b), c(102L, 50L, 802L, 452L))
+  # Edges are rounded, not the width: right edge 902.6 -> 902, so 800 wide.
+  expect_equal(unname(b), c(102L, 50L, 800L, 452L))
   expect_equal(names(b), c("x", "y", "w", "h"))
   edge <- lc_manim_box(list(x = 1800, y = 0, w = 400, h = 200), c(1920L, 1080L), 1, "d.html")
   expect_equal(unname(edge[["w"]]), 120L)
 })
 
+test_that("a box starting off the left or top keeps only its visible part", {
+  b <- lc_manim_box(list(x = -100, y = -50, w = 800, h = 400), c(1920L, 1080L), 1, "d.html")
+  expect_equal(unname(b), c(0L, 0L, 700L, 350L))
+})
+
 test_that("a box with no size stops with a fix", {
-  expect_error(lc_manim_box(list(x = 10, y = 10, w = 900, h = 0), c(1920L, 1080L), 4, "d.html"),
-               "slide 4 is 900x0 pixels")
+  err <- expect_error(lc_manim_box(list(x = 10, y = 10, w = 900, h = 0), c(1920L, 1080L), 4, "d.html"),
+                      "slide 4 is 900x0 pixels")
+  expect_match(conditionMessage(err), "style=\"width", fixed = TRUE)
   expect_error(lc_manim_box(NULL, c(1920L, 1080L), 4, "d.html"), "not found on slide 4")
 })
 

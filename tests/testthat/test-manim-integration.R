@@ -109,3 +109,66 @@ test_that("play tags cue sections on a scene slide", {
   expect_true(file.exists(r$video))
   expect_true(any(grepl("Slide 2: scene Tiny, 3 sections, 2 cued", msgs, fixed = TRUE)))
 })
+
+test_that("tagged narration waits for the scene's opening and each section (voice mocked)", {
+  skip_if_no_deck_tools()
+  dir <- withr::local_tempdir()
+  deck <- manim_deck(dir, notes = "First the square. [play: grow] Now it grows. [play: spin, over] And it turns.")
+  # A voice that is not recorded, so tags are voiced in pieces: each piece is 1 s.
+  write_config(c("voice:", "  provider: edge", "  narrator: en-US-AndrewNeural",
+                 "video:", "  resolution: 720p", "  crossfade: 0", "  silent:", "    \"1\": 1"), dir = dir)
+  real <- lc_voice_tagged
+  seen <- list()
+  local_mocked_bindings(
+    lc_manim_engine = function() "manim==test", lc_manim_run = fake_manim_run,
+    lc_edge_command = function() "/fake/edge-tts", lc_edge_engine = function() "edge-tts test",
+    lc_voice_edge = function(text, voice_id, cfg, out) {
+      processx::run("ffmpeg", c("-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=duration=1", out))
+      list(file = out, timing = NULL)
+    },
+    lc_voice_tagged = function(pieces, events, captured, voice_piece, cfg, work_base, busy = 0) {
+      v <- real(pieces, events, captured, voice_piece, cfg, work_base, busy = busy)
+      seen <<- list(busy = busy, at = v$at)
+      v
+    }
+  )
+  r <- build_video(deck, config = file.path(dir, "lecturecast.yml"), out_dir = file.path(dir, "out"),
+                   cache_dir = file.path(dir, "cache"), quiet = TRUE)
+  # The 0.5 s opening plays first; "grow" starts as piece 1 ends (1 s) and the
+  # narration waits 0.5 + 0.15 s; "spin, over" starts at 2.65 s.
+  expect_equal(seen$busy, 0.5, tolerance = 0.01)
+  expect_equal(seen$at, c(1, 2.65), tolerance = 0.05)
+  # 0.3 lead-in + 3.65 s narration + 0.5 tail.
+  expect_equal(r$segments$clip_seconds[r$segments$slide == 2], 4.45, tolerance = 0.1)
+})
+
+test_that("a mistyped cue is reported as fewer sections cued", {
+  skip_if_no_deck_tools()
+  dir <- withr::local_tempdir()
+  deck <- manim_deck(dir, notes = "First the square. Now \"grwo\" it. Then \"spin\" it.")
+  local_mocked_bindings(lc_manim_engine = function() "manim==test", lc_manim_run = fake_manim_run)
+  msgs <- testthat::capture_messages(
+    build_video(deck, config = file.path(dir, "lecturecast.yml"), out_dir = file.path(dir, "out"),
+                cache_dir = file.path(dir, "cache"))
+  )
+  expect_true(any(grepl("Slide 2: scene Tiny, 3 sections, 1 cued", msgs, fixed = TRUE)))
+})
+
+test_that("a scene and a chart with buttons on one slide stop the build, even with Manim off", {
+  skip_if_no_deck_tools()
+  dir <- withr::local_tempdir()
+  deck <- manim_deck(dir)
+  off <- file.path(dir, "off.yml")
+  writeLines(c(readLines(file.path(dir, "lecturecast.yml")), "  manim: false"), off)
+  real <- lc_read_slides
+  local_mocked_bindings(lc_read_slides = function(b, deck) {
+    s <- real(b, deck)
+    # Give slide 2 a chart button, as a Plotly chart with an updatemenu would.
+    s$buttons[[2]] <- data.frame(plot = 0L, menu = 0L, button = 0L, label = "Go", method = "animate",
+                                 stringsAsFactors = FALSE)
+    s
+  })
+  expect_error(build_video(deck, config = off, out_dir = file.path(dir, "out"), cache_dir = file.path(dir, "cache"),
+                           quiet = TRUE),
+               "Slide 2 holds a Manim scene and a Plotly chart with buttons")
+})

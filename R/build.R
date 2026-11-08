@@ -71,13 +71,14 @@ build_video <- function(deck, config = NULL, out_dir = NULL, work_dir = NULL,
   # voicing anything.
   manim <- vector("list", nrow(slides))
   manim_paths <- vector("list", nrow(slides))
-  both_on <- isTRUE(cfg$video$manim) && isTRUE(cfg$video$animations)
   for (k in unique(segs$slide)) {
     m <- lc_manim_spec(slides$manim[[k]], k, deck)
     if (is.null(m)) next
     manim[k] <- list(m)
     manim_paths[k] <- list(lc_manim_paths(m, cfg))
-    if (both_on && nrow(slides$buttons[[k]]) > 0) {
+    # Whatever the switches say: a scene slide never reaches the chart code,
+    # so the buttons would be skipped without a word.
+    if (nrow(slides$buttons[[k]]) > 0) {
       lc_abort("manim", sprintf("Slide %d holds a Manim scene and a Plotly chart with buttons; a slide can animate one or the other.", k),
                file = deck)
     }

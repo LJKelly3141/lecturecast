@@ -100,9 +100,11 @@ Slide numbers (`video: slide_number:`) are left off scene slides.
 
 To build without Manim, for example a quick draft, set `manim: false` under
 `video:` in `lecturecast.yml`. Each scene then shows the last frame of its
-most recent render, or a "not rendered yet" box if it has never been
-rendered. `video: animations: false` turns off chart animations only; the
-two settings are separate.
+render, as long as nothing that changes the pictures has changed since (the
+scene files, its data, the size, the frame rate or the background). If
+something has, or the scene has never been rendered, it shows a "not
+rendered yet" box until Manim is turned on again. `video: animations: false`
+turns off chart animations only; the two settings are separate.
 
 ## Explainer videos
 

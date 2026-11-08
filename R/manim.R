@@ -108,10 +108,12 @@ lc_manim_box <- function(r, wh, slide, deck) {
   step <- "manim"
   if (is.null(r)) lc_abort(step, sprintf("The Manim div was not found on slide %d during capture.", slide), file = deck)
   even <- function(v) 2L * as.integer(round(v / 2))
+  # Clip all four edges: a div starting off the left or top keeps only its
+  # visible part, so the scene never spills past the div's right or bottom.
   x <- max(0L, even(r$x))
   y <- max(0L, even(r$y))
-  w <- min(even(r$w), wh[1] - x)
-  h <- min(even(r$h), wh[2] - y)
+  w <- min(even(r$x + r$w), wh[1]) - x
+  h <- min(even(r$y + r$h), wh[2]) - y
   if (w < 16 || h < 16) {
     lc_abort(step, sprintf("The Manim div on slide %d is %dx%d pixels on screen, too small to show a scene.", slide, w, h),
              file = deck, fix = "Give the div a size, for example style=\"width: 100%; height: 480px;\", or use fill=\"frame\".")

@@ -180,3 +180,134 @@ lc_manim_runs <- function(texts, names, slide, deck = NULL, tags = NULL) {
              tag = !is.na(hit) & cued$tag[hit] %in% TRUE,
              over = !is.na(hit) & cued$over[hit] %in% TRUE)
 }
+
+# The render cache key: everything that changes the pictures. Every .py file
+# beside the scene counts, so a change to a helper module re-renders, and so
+# does a manim.cfg there, which Manim reads from its working directory.
+lc_manim_key <- function(paths, spec, rect, cfg) {
+  py <- sort(list.files(dirname(paths$scene), pattern = "(\\.py|^manim\\.cfg)$", full.names = TRUE))
+  hashes <- function(f, nm) stats::setNames(as.list(vapply(f, cli::hash_file_sha256, "", USE.NAMES = FALSE)), nm)
+  parts <- list(
+    engine = lc_manim_engine(), scene = spec$scene, file = basename(paths$scene),
+    py = hashes(py, basename(py)), inputs = hashes(paths$inputs, spec$inputs),
+    w = rect[["w"]], h = rect[["h"]], fps = cfg$video$fps, background = cfg$manim$background
+  )
+  cli::hash_sha256(as.character(jsonlite::toJSON(parts, auto_unbox = TRUE, null = "null")))
+}
+
+# Run Manim on one scene and return the path of its section list.
+lc_manim_run <- function(paths, spec, rect, cfg, media) {
+  step <- "manim"
+  cmd <- lc_manim_command()
+  # Manim 0.22 has no background flag; the colour goes in a config file.
+  bg <- NULL
+  if (!is.null(cfg$manim$background)) {
+    bg <- file.path(media, "lecturecast.cfg")
+    writeLines(c("[CLI]", paste0("background_color = ", cfg$manim$background)), bg)
+  }
+  args <- c(cmd[-1], "render", "--save_sections", "--format", "mp4", "--disable_caching",
+            "--progress_bar", "none",
+            "--resolution", sprintf("%d,%d", rect[["w"]], rect[["h"]]),
+            "--frame_rate", as.character(cfg$video$fps), "--media_dir", media,
+            if (!is.null(bg)) c("--config_file", bg),
+            basename(paths$scene), spec$scene)
+  lc_run(cmd[1], args, step = step, file = paths$scene, timeout = cfg$manim$timeout, wd = dirname(paths$scene),
+         fix = "Run the scene with manim in a terminal to see the whole error. For math text, check latex and dvisvgm with lecturecast_check().")
+  json <- list.files(media, pattern = paste0("^", spec$scene, "\\.json$"), recursive = TRUE, full.names = TRUE)
+  json <- json[basename(dirname(json)) == "sections"]
+  if (length(json) != 1) {
+    lc_abort(step, sprintf("Manim finished but wrote no section list for scene %s.", spec$scene), file = paths$scene,
+             fix = "Check that scene= names a Scene class in the file.")
+  }
+  json
+}
+
+# Manim's section list as name and video file, in scene order. Sections with
+# no animation have no video and are dropped.
+lc_manim_sections <- function(json, spec, scene_file) {
+  step <- "manim"
+  x <- tryCatch(jsonlite::fromJSON(json), error = function(e) NULL)
+  if (!is.data.frame(x) || !all(c("name", "video") %in% names(x))) {
+    lc_abort(step, "Manim's section list is not in the form lecturecast expects.", file = json,
+             fix = paste0("lecturecast is tested with Manim ", lc_manim_version, "."))
+  }
+  x <- x[!is.na(x$video) & nzchar(x$video), , drop = FALSE]
+  if (nrow(x) == 0) {
+    lc_abort(step, sprintf("Scene %s has no animations, so there is nothing to play.", spec$scene), file = scene_file)
+  }
+  dup <- duplicated(lc_label_key(x$name))
+  if (any(dup)) {
+    lc_abort(step, sprintf("Scene %s has two sections named \"%s\"; cue names must differ.", spec$scene, x$name[dup][1]),
+             file = scene_file)
+  }
+  data.frame(name = x$name, file = file.path(dirname(json), x$video), stringsAsFactors = FALSE)
+}
+
+# Render a scene's sections, or reuse them from the cache. The render is
+# copied into a temporary folder with its index, then the folder is renamed
+# into place, so an index file marks a finished entry.
+lc_manim_render <- function(paths, spec, rect, cfg, cache) {
+  step <- "manim"
+  key <- lc_manim_key(paths, spec, rect, cfg)
+  dir <- file.path(cache, "manim", key)
+  index <- file.path(dir, "sections.json")
+  if (file.exists(index)) return(structure(lc_manim_cached(dir, index), cached = TRUE))
+  # A folder of its own per render, so two builds never share one.
+  tmp <- tempfile("render-", tmpdir = lc_dir_create(dirname(dir)))
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+  json <- lc_manim_run(paths, spec, rect, cfg, lc_dir_create(file.path(tmp, "media")))
+  secs <- lc_manim_sections(json, spec, paths$scene)
+  out <- lc_dir_create(file.path(tmp, "out"))
+  stored <- sprintf("%03d.mp4", seq_len(nrow(secs)))
+  if (!all(file.copy(secs$file, file.path(out, stored)))) lc_abort(step, "Could not copy the rendered sections.", file = out)
+  for (f in file.path(out, stored)) {
+    wh <- lc_dimensions(f, step)
+    if (!identical(wh, unname(c(rect[["w"]], rect[["h"]])))) {
+      lc_abort(step, sprintf("Manim rendered %dx%d, expected %dx%d.", wh[1], wh[2], rect[["w"]], rect[["h"]]), file = f)
+    }
+  }
+  secs$seconds <- vapply(file.path(out, stored), lc_duration, numeric(1), step = step, USE.NAMES = FALSE)
+  secs$file <- stored
+  writeLines(jsonlite::toJSON(list(scene = spec$scene, sections = secs), dataframe = "rows", auto_unbox = TRUE, digits = NA),
+             file.path(out, "sections.json"))
+  if (!file.rename(out, dir)) {
+    # Another build may have stored the same render meanwhile; use it.
+    if (file.exists(index)) return(structure(lc_manim_cached(dir, index), cached = TRUE))
+    lc_abort(step, "Could not store the render in the cache.", file = dir)
+  }
+  secs$file <- file.path(dir, stored)
+  structure(secs, cached = FALSE)
+}
+
+lc_manim_cached <- function(dir, index) {
+  step <- "manim (cache)"
+  fix <- paste0("Delete the folder ", dir, " and build again; the scene will be rendered afresh.")
+  m <- tryCatch(jsonlite::fromJSON(index), error = function(e) lc_abort(step, "The cached render is damaged.", file = index, fix = fix))
+  secs <- m$sections
+  ok <- is.data.frame(secs) && nrow(secs) > 0 && all(c("name", "file", "seconds") %in% names(secs)) &&
+    is.character(secs$name) && all(!is.na(secs$name) & nzchar(secs$name)) &&
+    is.character(secs$file) && all(!is.na(secs$file) & nzchar(secs$file)) &&
+    is.numeric(secs$seconds) && all(is.finite(secs$seconds) & secs$seconds > 0)
+  if (!ok) lc_abort(step, "The cached render is damaged.", file = index, fix = fix)
+  secs$file <- file.path(dir, secs$file)
+  for (k in seq_len(nrow(secs))) {
+    if (!file.exists(secs$file[k])) lc_abort(step, "A cached section video is missing.", file = secs$file[k], fix = fix)
+    d <- lc_duration(secs$file[k], step)
+    if (abs(d - secs$seconds[k]) > 0.05) {
+      lc_abort(step, "A cached section video is not the length recorded for it.", file = secs$file[k], fix = fix)
+    }
+  }
+  secs[, c("name", "file", "seconds")]
+}
+
+# For video: manim: false. The scene's cached render, or NULL when there is
+# none. Never runs or requires Manim: with no manim and no uv, there is no
+# engine to key on, so there is no render to find.
+lc_manim_lookup <- function(paths, spec, rect, cfg, cache) {
+  key <- tryCatch(lc_manim_key(paths, spec, rect, cfg), lecturecast_error = function(e) NULL)
+  if (is.null(key)) return(NULL)
+  dir <- file.path(cache, "manim", key)
+  index <- file.path(dir, "sections.json")
+  if (!file.exists(index)) return(NULL)
+  lc_manim_cached(dir, index)
+}

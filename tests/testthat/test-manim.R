@@ -175,3 +175,149 @@ test_that("an unknown tag or a section tagged twice stops the build", {
   expect_error(lc_manim_runs(q$text, c("opening", "grow"), 4, "d.html", tags = list(q$tags)),
                "plays section \"grow\" twice")
 })
+
+test_that("the render key ignores notes but follows every input to the pictures", {
+  local_mocked_bindings(lc_manim_engine = function() "manim==test")
+  f <- manim_fixture()
+  rect <- c(x = 0L, y = 0L, w = 640L, h = 360L)
+  k <- lc_manim_key(f$paths, f$spec, rect, f$cfg)
+  expect_equal(k, lc_manim_key(f$paths, f$spec, rect, f$cfg))
+  expect_false(k == lc_manim_key(f$paths, f$spec, c(x = 0L, y = 0L, w = 1280L, h = 720L), f$cfg))
+  expect_false(k == lc_manim_key(f$paths, modifyList(f$spec, list(scene = "Other")), rect, f$cfg))
+  cfg2 <- f$cfg; cfg2$video$fps <- 60
+  expect_false(k == lc_manim_key(f$paths, f$spec, rect, cfg2))
+  cfg3 <- f$cfg; cfg3$manim$background <- "#000000"
+  expect_false(k == lc_manim_key(f$paths, f$spec, rect, cfg3))
+  writeLines("def helper(): return 1", file.path(f$dir, "scenes", "util.py"))
+  k2 <- lc_manim_key(f$paths, f$spec, rect, f$cfg)
+  expect_false(k == k2)
+  writeLines("x,y\n1,3", file.path(f$dir, "scenes", "data", "d.csv"))
+  k3 <- lc_manim_key(f$paths, f$spec, rect, f$cfg)
+  expect_false(k2 == k3)
+  writeLines(c("[CLI]", "frame_rate = 15"), file.path(f$dir, "scenes", "manim.cfg"))
+  expect_false(k3 == lc_manim_key(f$paths, f$spec, rect, f$cfg))
+})
+
+test_that("a background colour goes to Manim through a config file", {
+  f <- manim_fixture()
+  f$cfg$manim$background <- "#1e1e1e"
+  media <- withr::local_tempdir()
+  seen <- NULL
+  local_mocked_bindings(lc_manim_command = function() "/fake/manim",
+                        lc_run = function(cmd, args, ...) { seen <<- args; list(stdout = "", stderr = "") })
+  expect_error(lc_manim_run(f$paths, f$spec, c(x = 0L, y = 0L, w = 320L, h = 180L), f$cfg, media), "no section list")
+  expect_false("--background_color" %in% seen)
+  cf <- seen[which(seen == "--config_file") + 1]
+  expect_equal(readLines(cf), c("[CLI]", "background_color = #1e1e1e"))
+})
+
+test_that("the section list keeps sections with video, in scene order", {
+  dir <- withr::local_tempdir()
+  json <- file.path(dir, "Tiny.json")
+  writeLines('[{"name": "autocreated", "video": null}, {"name": "grow", "video": "Tiny_0001.mp4"}]', json)
+  s <- lc_manim_sections(json, list(scene = "Tiny"), "tiny.py")
+  expect_equal(s$name, "grow")
+  expect_equal(s$file, file.path(dir, "Tiny_0001.mp4"))
+})
+
+test_that("a scene with no animations or duplicate names stops", {
+  dir <- withr::local_tempdir()
+  json <- file.path(dir, "Tiny.json")
+  writeLines('[{"name": "autocreated", "video": null}]', json)
+  expect_error(lc_manim_sections(json, list(scene = "Tiny"), "tiny.py"), "has no animations")
+  writeLines('[{"name": "Grow", "video": "a.mp4"}, {"name": "grow.", "video": "b.mp4"}]', json)
+  expect_error(lc_manim_sections(json, list(scene = "Tiny"), "tiny.py"), "two sections named")
+  writeLines('{"unexpected": true}', json)
+  expect_error(lc_manim_sections(json, list(scene = "Tiny"), "tiny.py"), "not in the form")
+})
+
+test_that("a render is stored once and reused", {
+  skip_if_no_ffmpeg()
+  local_mocked_bindings(lc_manim_engine = function() "manim==test")
+  f <- manim_fixture()
+  cache <- withr::local_tempdir()
+  calls <- 0
+  local_mocked_bindings(lc_manim_run = function(...) { calls <<- calls + 1; fake_manim_run(...) })
+  rect <- c(x = 0L, y = 0L, w = 320L, h = 180L)
+  a <- lc_manim_render(f$paths, f$spec, rect, f$cfg, cache)
+  b <- lc_manim_render(f$paths, f$spec, rect, f$cfg, cache)
+  expect_equal(calls, 1)
+  expect_false(attr(a, "cached"))
+  expect_true(attr(b, "cached"))
+  expect_equal(b$name, c("autocreated", "grow", "spin"))
+  expect_equal(b$seconds, c(0.5, 0.5, 0.5), tolerance = 0.05)
+  expect_true(all(startsWith(b$file, file.path(cache, "manim"))))
+})
+
+test_that("a render of the wrong size stops the build", {
+  skip_if_no_ffmpeg()
+  local_mocked_bindings(lc_manim_engine = function() "manim==test")
+  f <- manim_fixture()
+  local_mocked_bindings(lc_manim_run = function(paths, spec, rect, cfg, media) {
+    fake_manim_run(paths, spec, c(x = 0L, y = 0L, w = 200L, h = 100L), cfg, media)
+  })
+  expect_error(lc_manim_render(f$paths, f$spec, c(x = 0L, y = 0L, w = 320L, h = 180L), f$cfg, withr::local_tempdir()),
+               "Manim rendered 200x100, expected 320x180")
+})
+
+test_that("a damaged cached render stops with the folder to delete", {
+  skip_if_no_ffmpeg()
+  local_mocked_bindings(lc_manim_engine = function() "manim==test")
+  f <- manim_fixture()
+  cache <- withr::local_tempdir()
+  local_mocked_bindings(lc_manim_run = fake_manim_run)
+  rect <- c(x = 0L, y = 0L, w = 320L, h = 180L)
+  r <- lc_manim_render(f$paths, f$spec, rect, f$cfg, cache)
+  file.remove(r$file[2])
+  expect_error(lc_manim_render(f$paths, f$spec, rect, f$cfg, cache), "cached section video is missing")
+})
+
+test_that("a cached index with bad values stops with the folder to delete", {
+  skip_if_no_ffmpeg()
+  local_mocked_bindings(lc_manim_engine = function() "manim==test", lc_manim_run = fake_manim_run)
+  f <- manim_fixture()
+  cache <- withr::local_tempdir()
+  rect <- c(x = 0L, y = 0L, w = 320L, h = 180L)
+  r <- lc_manim_render(f$paths, f$spec, rect, f$cfg, cache)
+  index <- file.path(dirname(r$file[1]), "sections.json")
+  m <- jsonlite::fromJSON(index)
+  m$sections$seconds[1] <- NA
+  writeLines(jsonlite::toJSON(m, dataframe = "rows", auto_unbox = TRUE, na = "null"), index)
+  err <- expect_error(lc_manim_render(f$paths, f$spec, rect, f$cfg, cache), "damaged")
+  expect_match(conditionMessage(err), "Delete the folder", fixed = TRUE)
+})
+
+test_that("a failed manim run shows its error and the fix", {
+  skip_on_os("windows")
+  f <- manim_fixture()
+  local_mocked_bindings(lc_manim_command = function() c("/bin/sh", "-c", "echo 'LaTeX error: latex not found' >&2; exit 1", "manim"))
+  err <- expect_error(lc_manim_run(f$paths, f$spec, c(x = 0L, y = 0L, w = 320L, h = 180L), f$cfg, withr::local_tempdir()),
+                      "latex not found")
+  expect_match(conditionMessage(err), "lecturecast_check", fixed = TRUE)
+})
+
+test_that("a run that writes no section list names the class", {
+  skip_on_os("windows")
+  f <- manim_fixture()
+  local_mocked_bindings(lc_manim_command = function() c("/bin/sh", "-c", "exit 0", "manim"))
+  expect_error(lc_manim_run(f$paths, f$spec, c(x = 0L, y = 0L, w = 320L, h = 180L), f$cfg, withr::local_tempdir()),
+               "wrote no section list for scene Tiny")
+})
+
+test_that("with Manim off, a cached render is found without running Manim", {
+  skip_if_no_ffmpeg()
+  local_mocked_bindings(lc_manim_engine = function() "manim==test", lc_manim_run = fake_manim_run)
+  f <- manim_fixture()
+  cache <- withr::local_tempdir()
+  rect <- c(x = 0L, y = 0L, w = 320L, h = 180L)
+  expect_null(lc_manim_lookup(f$paths, f$spec, rect, f$cfg, cache))
+  lc_manim_render(f$paths, f$spec, rect, f$cfg, cache)
+  local_mocked_bindings(lc_manim_run = function(...) stop("not called"))
+  expect_equal(lc_manim_lookup(f$paths, f$spec, rect, f$cfg, cache)$name, c("autocreated", "grow", "spin"))
+})
+
+test_that("with Manim off and no Manim installed, the lookup finds nothing and does not stop", {
+  f <- manim_fixture()
+  local_mocked_bindings(lc_find_tool = function(tool) "")
+  expect_null(lc_manim_lookup(f$paths, f$spec, c(x = 0L, y = 0L, w = 320L, h = 180L), f$cfg, withr::local_tempdir()))
+})

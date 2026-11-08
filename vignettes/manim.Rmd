@@ -1,0 +1,195 @@
+---
+title: "Animated scenes with Manim"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Animated scenes with Manim}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+[Manim](https://www.manim.community/) is the Python animation library used
+for the 3Blue1Brown videos. lecturecast can play a Manim scene on a slide and
+start each part of it when the narration reaches a quoted phrase, the same
+way it plays Plotly buttons. Use it when the motion is the idea: a curve
+shifting, a distribution building up, an equation rearranging.
+
+lecturecast keeps control of the voice, the timing and the captions. Manim
+only draws the pictures.
+
+## Setup
+
+lecturecast runs Manim Community Edition through
+[uv](https://docs.astral.sh/uv/), at a version fixed in the package, so
+there is nothing to install beyond uv. A `manim` command on your PATH is
+used instead when there is one. Scenes that use math text (`MathTex`) also
+need LaTeX and `dvisvgm`. Check what is found with:
+
+```{r}
+lecturecast::lecturecast_check()
+```
+
+## A scene on a slide
+
+Put a div with class `manim` on the slide. `file=` is relative to the folder
+holding `lecturecast.yml`; `scene=` is the Python class. A scene in a box
+needs a size:
+
+```markdown
+## A rise in income
+
+::: {.manim file="scenes/demand.py" scene="DemandShift" style="width: 100%; height: 520px;"}
+:::
+```
+
+In the scene, `self.next_section("name")` marks each place a cue can start:
+
+```python
+class DemandShift(Scene):
+    def construct(self):
+        ...
+        self.play(Create(supply), Create(demand))
+        self.next_section("demand shifts right")
+        self.play(Transform(demand, demand_new))
+        self.next_section("price and quantity rise")
+        self.play(Create(guides))
+```
+
+In the speaker notes, quote a section's name where it should start:
+
+```markdown
+::: notes
+When incomes rise, "demand shifts right". The new balance sits up and to
+the right, so "price and quantity rise" together.
+:::
+```
+
+The rules:
+
+- Whatever the scene does before its first `next_section()` plays as the
+  slide opens.
+- A section starts when the narration reaches the first quote of its name,
+  or when the section before it finishes, whichever is later. Case and
+  trailing punctuation do not matter.
+- A section that is never quoted plays straight after the one before it.
+- Quotes must follow the scene's order. Quoting a section again later, as a
+  reminder, does nothing.
+- For exact timing, use a play tag instead of a quote, as for charts:
+  `[play: demand shifts right]` starts the section at that point and the
+  narration waits for it; `[play: demand shifts right, over]` lets the
+  narration carry on while it plays. The voice never reads the tag. A
+  stretch of notes with tags uses only its tags, and a tag that names no
+  section stops the build with the scene's section names.
+- On a silent slide the whole scene plays. The slide lasts as long as the
+  scene plus the usual short pause before and after, or as long as its
+  silent setting, whichever is longer.
+
+The build prints how many sections each slide cued. If that number is lower
+than you expect, check the spelling of the quotes.
+
+`lint_notes()` cannot see inside a scene, so it does not report scene slides
+as static. The build checks their timing instead, once the scene is rendered,
+and prints a note when the scene's picture stays still for more than 30
+seconds or the scene keeps moving more than a second after the narration
+ends.
+
+Slide numbers (`video: slide_number:`) are left off scene slides.
+
+To build without Manim, for example a quick draft, set `manim: false` under
+`video:` in `lecturecast.yml`. Each scene then shows the last frame of its
+most recent render, or a "not rendered yet" box if it has never been
+rendered. `video: animations: false` turns off chart animations only; the
+two settings are separate.
+
+## Explainer videos
+
+For a 3Blue1Brown-style video, make a deck whose slides each hold one scene
+that fills the whole frame, with the narration in the notes:
+
+```markdown
+## Where the bell curve comes from
+
+::: {.manim file="scenes/clt.py" scene="SampleMeans" fill="frame"}
+:::
+```
+
+`build_video()` treats it like any other deck, so the voice cache,
+captions, transcript, title and end cards all work as usual. To set the
+background of every scene, add to `lecturecast.yml`:
+
+```yaml
+manim:
+  background: "#1e1e1e"
+```
+
+If a scene's folder has its own `manim.cfg`, set the background there
+instead (`background_color = #1e1e1e` under `[CLI]`). The build stops if
+both are set, because Manim would then ignore the `manim.cfg`.
+
+## Data from R
+
+A scene can read data that an R chunk in the deck writes. The numbers then
+come from the same code as the rest of the deck. Write a CSV next to the
+scene in a hidden chunk:
+
+```{r}
+dir.create("scenes/data", recursive = TRUE, showWarnings = FALSE)
+set.seed(730)
+means <- data.frame(mean = replicate(200, mean(rexp(30, rate = 1 / 3))))
+write.csv(means, "scenes/data/means.csv", row.names = FALSE)
+```
+
+Name the file in `inputs=` so a change to the data renders the scene again.
+`inputs=` is relative to the scene's folder, which is also where the scene
+opens it:
+
+```markdown
+::: {.manim file="scenes/clt.py" scene="SampleMeans" inputs="data/means.csv" fill="frame"}
+:::
+```
+
+```python
+import csv
+from pathlib import Path
+
+def read_csv(name):
+    with open(Path(__file__).parent / "data" / name, newline="") as f:
+        return list(csv.DictReader(f))
+```
+
+Render the deck with Quarto first, so the data exist, then build the video.
+
+## The examples
+
+The package ships a deck with one economics scene (a demand shift, in a box)
+and one statistics scene (sample means building a bell curve, full frame):
+
+```{r}
+ex <- system.file("examples", "manim", package = "lecturecast")
+file.copy(ex, tempdir(), recursive = TRUE)
+dir <- file.path(tempdir(), "manim")
+quarto::quarto_render(file.path(dir, "scenes.qmd"))
+lecturecast::build_video(file.path(dir, "scenes.html"))
+```
+
+## When a build stops
+
+- **Manim errors** are shown with the last lines of Manim's own message.
+  Run the same scene with `manim` in a terminal to see all of it.
+- **A box too small** means the div has no size. Give it a `style=` with a
+  width and a height, or use `fill="frame"`.
+- **Sections out of order** means the notes quote a later section before an
+  earlier one.
+- **No class named** means `scene=` does not match a class in the file. The
+  message lists the classes the file has.
+
+Renders are cached by the `.py` files in the scene's own folder, a
+`manim.cfg` there if there is one, the files named in `inputs=`, the size,
+the frame rate and the background. Editing the
+notes or changing the voice does not render a scene again. A change anywhere
+else, such as a module in another folder or a data file not listed in
+`inputs=`, is not noticed: list the file in `inputs=`, or delete the cache
+folder to force a fresh render.

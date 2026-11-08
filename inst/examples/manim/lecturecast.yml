@@ -1,0 +1,7 @@
+voice:
+  provider: edge
+  narrator: en-US-AndrewNeural
+video:
+  resolution: 1080p
+  silent:
+    "1": 3

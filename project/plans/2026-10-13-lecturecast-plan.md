@@ -81,6 +81,7 @@ The ElevenLabs key comes only from the `ELEVENLABS_API_KEY` environment variable
     10. Minor: unique temp folder per render (`tempfile(tmpdir = cache)`) instead of `<key>.tmp`; handle another build having published the key.
     Not a defect: Manim CLI facts are unverified by design; Task 0 is the gate. Vignette's "nothing beyond uv" waits on Task 0.
     Open for Logan: (A) should `video: animations: false` also disable Manim (show the scene's final picture as a still), or control Plotly only? (B) approve making edits 1-10. Also pending: proposal doc edits (pinning bullet, 5a-5c relabeled 4c).
+    Resolved 2026-11-08: edits 1-10 written into the 4c plan. (A) two switches, `video: animations:` for Plotly and a new `video: manim:`. A Fable review against HEAD 8274585 found one blocker (Manim 0.22.0 has no `--background_color`) and eight more; all are in the plan, with Logan's rulings of that day (play tags cue sections, lint skips scene slides and the build reports scene timing, no slide numbers on scene slides, deck only, version 0.22.0). Still pending: proposal doc edits. Next: Task 0.
 5. **coursepack link.** `Suggests`, availability check, install skill in coursepack, a place for outputs outside git. coursepack links to the narration vignette and can run `lint_notes()` in its build.
 6. **Public release.** Repo made public; CRAN optional.
 

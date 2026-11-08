@@ -17,6 +17,19 @@
 - Python: `uvx`, pinned, same as edge-tts. A `manim` on PATH is used first.
 - Name: Phase 4c.
 
+## Rulings from Logan (2026-11-08)
+
+A spike (`work/manim-spike/FINDINGS.md`) rendered a three-section scene with Manim 0.22.0 through uvx: every in-between frame of a Transform is in the section video (60 of 60 frames distinct), so Manim does not have Plotly's transition problem. The Codex review fixes (1 to 10) were written into this plan the same day, then a second review (Fable) checked the plan against HEAD 8274585; its fixes are in too.
+
+- **Two switches.** `video: animations:` controls Plotly only. A new `video: manim:` (default true) controls Manim. Each can be turned off alone.
+- **Manim off.** A scene slide shows the last frame of the scene's most recent cached render, laid over the slide at the box. With no cached render, the box shows a "Manim scene not rendered yet" placeholder. Manim is never run and never required when off.
+- **Deck only.** Explainer videos stay decks of full-frame scenes (ruling 1 below). No direct scene-plus-script path for now; revisit if writing the wrapper deck gets tedious.
+- **Version.** `lc_manim_version` is `"0.22.0"` (0.22.1, 2026-10-27, was under two weeks old on 2026-11-08).
+- **Play tags cue sections.** `[play: section name]` and `[play: section name, over]` in the notes start a section exactly there, as they do for Plotly buttons: the narration is voiced in pieces and waits for the section unless `over`. A segment with tags uses only its tags; a segment without tags uses quotes. An unknown tag label stops the build and lists the scene's section names.
+- **Lint skips scene slides** for "static slide", "static after animation" and "unknown tag" (lint cannot see section names or lengths without rendering).
+- **The build reports timing instead.** After a scene slide's schedule is made, the build prints a note when the scene's picture stays still for more than 30 seconds, or when the scene runs more than 1 second past the narration. A note, not a stop.
+- **No slide number on scene slides.** When `video: slide_number:` is on, the number is hidden while a scene slide is captured, boxed or full frame.
+
 ## Design rulings in this plan (for Logan's review before execution)
 
 These go beyond the proposal. Each is the plan's recommendation; any can be changed before work starts.
@@ -27,14 +40,14 @@ These go beyond the proposal. Each is the plan's recommendation; any can be chan
 4. **One scene per slide, and no Plotly buttons on the same slide.** Both stop the build with a clear message.
 5. **Paths:** `file=` is relative to the folder holding `lecturecast.yml`. `inputs=` (the data files the scene reads) are relative to the scene file's folder, because Manim runs in that folder and the scene opens them by the same relative path.
 6. **A box must have a size.** An empty div has no height in HTML, so a `fill="box"` div needs a `style=` with a width and height. A box under 16 pixels stops the build and says how to fix it. No CSS is injected.
-7. **A silent slide plays its whole scene,** and the clip is as long as the scene or the silent duration, whichever is longer.
-8. **The render cache key** covers the Manim version, the scene class, the contents of every `.py` file in the scene's folder (so helper modules count), the contents of each `inputs=` file, the box size, the frame rate and the background setting. Notes and voice do not affect it.
+7. **A silent slide plays its whole scene,** and the clip is as long as the lead-in, the scene and the tail together, or the silent duration, whichever is longer.
+8. **The render cache key** covers the Manim version, the scene class, the contents of every `.py` file in the scene's folder (so helper modules count), a `manim.cfg` in that folder if there is one (Manim reads it from the working directory), the contents of each `inputs=` file, the box size, the frame rate and the background setting. Notes and voice do not affect it.
 
 ## Global Constraints
 
 - Workspace: `/Volumes/SSD8TB/Sync/Developer/lecturecast` only. Never write into `/Volumes/SSD8TB/Sync/UWRF/Teaching/macro_principles` or any other repo.
 - Renders, frames, audio and video go in gitignored places (`work/`, temp dirs, the cache dir). Never render a `.qmd` in place outside lecturecast.
-- Manim version pinned in `lc_manim_version` (Task 0 confirms the value; the proposal found v0.20.1). Option `lecturecast.manim_version` overrides it, as `lecturecast.edge_tts_version` does for edge-tts.
+- Manim version pinned in `lc_manim_version` (0.22.0, from the 2026-11-08 spike; the proposal's v0.20.1 is out of date). Option `lecturecast.manim_version` overrides it, as `lecturecast.edge_tts_version` does for edge-tts.
 - Manim never voices anything. No manim-voiceover.
 - Every failure stops with `lc_abort(step, problem, file, fix)`. Nothing partial is reported as finished.
 - No em-dashes in user-facing text: vignette, messages, example files, README.
@@ -50,17 +63,22 @@ These go beyond the proposal. Each is the plan's recommendation; any can be chan
 3. **A box div with no size.** Expected: stop with the slide number and a `style=` example. Test in Task 2.
 4. **Rebuilding after a notes-only edit.** Expected: no re-render. After editing a helper `.py` beside the scene: re-render. Test in Task 4 (key unchanged / changed).
 5. **Changing `video: resolution:`.** Expected: the box is measured again at the new size and the scene re-renders at that size. Test in Task 4 (key includes width and height) and Task 2 (box scales with the measured rect).
+6. **`video: manim: false` on a machine with no Manim and no uv.** Expected: the build finishes; a scene with a cached render shows its last frame, one without shows the placeholder. Test in Task 6.
+7. **A `[play: name]` tag with the narration waiting.** Expected: the narration after the tag starts only when the section (and any uncued sections after it) has played. Test in Task 3 (runs from tags) and Task 6 (tagged voice layout with an opening run).
 
 ## File map
 
 - Create `R/manim.R`: everything Manim-specific (command, slide spec, box, cue runs, render and cache, frames, overlay, clip).
 - Modify `R/deck.R`: `lc_read_slides()` reads `.manim` divs into a `manim` list column.
-- Modify `R/build.R`: capture loop measures boxes; after Chrome closes, render, plan runs, composite stills; clip loop builds Manim clips.
-- Modify `R/config.R`: `manim:` settings block and validation.
+- Modify `R/build.R`: capture loop measures boxes, hides the slide number and draws the off-mode placeholder; after Chrome closes, render (or look up the cache when off), plan runs, composite stills; tagged voice for scene slides; clip loop builds Manim clips and prints timing notes.
+- Modify `R/config.R`: `manim:` settings block, `video: manim:` switch, validation.
 - Modify `R/check.R`: rows for manim, latex, dvisvgm.
-- Modify `DESCRIPTION`: `cli (>= 3.6.0)` for `cli::hash_file_sha256()`.
+- Modify `R/voice.R`: initialise `lc_state$manim_engine` beside `lc_state$edge_engine`.
+- Modify `R/tags.R`: `lc_voice_tagged()` gains `busy` (seconds an untagged opening run plays first).
+- Modify `R/lint.R`: scene slides skip "static slide", "static after animation" and "unknown tag".
+- Modify `DESCRIPTION`: `cli (>= 3.2.0)` for `cli::hash_file_sha256()` (cli NEWS puts both hash functions in 3.2.0).
 - Create `tests/testthat/test-manim.R`, `tests/testthat/test-manim-integration.R`, `tests/testthat/fixtures/manim/scene.py`, `tests/testthat/fixtures/manim/manim.qmd`.
-- Modify `tests/testthat/test-check.R`, `tests/testthat/test-config.R`.
+- Modify `tests/testthat/test-check.R`, `tests/testthat/test-config.R`, `tests/testthat/test-tags.R`, `tests/testthat/test-lint.R`.
 - Create `inst/examples/manim/` (deck, settings, two scenes) and `vignettes/manim.Rmd`.
 - Modify `project/plans/2026-10-13-lecturecast-plan.md` (add 4c to Phases) and `project/plans/2026-10-13-ledger.md` (task log, research, rulings).
 
@@ -69,6 +87,8 @@ These go beyond the proposal. Each is the plan's recommendation; any can be chan
 ### Task 0: Verify Manim facts before building
 
 Nothing in this task is committed except ledger notes. Every later task assumes these facts; if one is wrong, stop and correct this plan first (tell Logan what changed).
+
+Already known (2026-11-08 spike and review): Step 1 is done (0.22.0). uvx ran it on this Mac on the first try (72 s, mostly the download); uvx and ffmpeg are in `/opt/homebrew/bin`, which is not on PATH in every shell. `--save_sections` writes `sections/<Scene>.json` with `name`, `type`, `video`, `width`, `height`, `nb_frames`, `duration`, `avg_frame_rate`, `codec_name`, `pix_fmt`, and files `<Scene>_000N_<slug>.mp4`. The 0.22.0 help confirms `--save_sections`, `--format`, `--disable_caching`, `--progress_bar`, `-r/--resolution W,H`, `--fps/--frame_rate`, `--media_dir`, and `-c/--config_file`. There is **no** `--background_color` option; the background goes through a config file (Task 4). Steps 2 to 9 still run, to record the rest.
 
 **Files:**
 - Modify: `project/plans/2026-10-13-ledger.md` (Research section)
@@ -84,7 +104,7 @@ Expected: prints the version. Record how long the first run took (it downloads w
 - [ ] **Step 3: Confirm the CLI flags.**
 
 Run: `uvx --from manim==<version> manim render --help`
-Expected: these flags exist with these spellings: `--save_sections`, `--format`, `--disable_caching`, `--progress_bar`, `--resolution` (takes `W,H`), `--frame_rate` (or `--fps`), `--media_dir`, `--background_color`. Record any differences; Task 4's `lc_manim_run()` uses them.
+Expected: these flags exist with these spellings: `--save_sections`, `--format`, `--disable_caching`, `--progress_bar`, `--resolution` (takes `W,H`), `--frame_rate` (or `--fps`), `--media_dir`, `--config_file`. Record any differences; Task 4's `lc_manim_run()` uses them. Also render once with a config file holding `[CLI]` and `background_color = #1e1e1e` and confirm the frames come out that colour (a `#` after `=` must not be read as a comment), and that a `manim.cfg` in the scene's folder still applies alongside `--config_file`.
 
 - [ ] **Step 4: Render the test fixture scene** (copy `tests/testthat/fixtures/manim/scene.py` from Task 6, Step 1 into `work/manim-spike/`).
 
@@ -95,14 +115,14 @@ Expected, to record:
   - that section videos are 640x360 at 30 fps (`ffprobe`);
   - the name Manim gives the automatic first section.
 
-- [ ] **Step 5: Confirm failure behaviour.** Run the same command with scene name `NoSuchScene`, and once with a scene that uses `MathTex` while `latex` is hidden from PATH (`PATH=/usr/bin:/bin`). Record the exit status and the last stderr lines. If a missing class exits 0, `lc_manim_run()` must rely on the missing section list (it already does).
+- [ ] **Step 5: Confirm failure behaviour.** Run the same command with scene name `NoSuchScene`, and once with a scene that uses `MathTex` while `latex` is hidden from PATH: `PATH=/usr/bin:/bin "$(command -v uvx)" --from manim==<version> manim render ...` (the full path to uvx, so only latex and dvisvgm disappear; record that path in the ledger). Record the exit status and the last stderr lines. If a missing class exits 0, `lc_manim_run()` must rely on the missing section list (it already does).
 
 - [ ] **Step 6: Confirm Pandoc writes div attributes as `data-*`.** Render `tests/testthat/fixtures/manim/manim.qmd` (Task 6, Step 1) in `work/manim-spike/` with `quarto render` and run `grep -o '<div class="manim"[^>]*>' manim.html`.
 Expected: `data-file="scene.py" data-scene="Tiny"` and the `style` attribute. `lc_read_slides()` reads both `data-x` and `x`, so either form works; record which.
 
 - [ ] **Step 7: Confirm the example scenes render** (Task 7's `demand.py` and `clt.py`, with their CSVs written by hand from the R code in Task 7). Record any Manim API errors (`get_lines_to_point`, `x_axis.unit_size`) and fix the scene code in this plan before Task 7.
 
-- [ ] **Step 8: Confirm `cli::hash_file_sha256()` exists** in the installed cli and the version that added it: `Rscript -e 'packageVersion("cli"); cli::hash_file_sha256(system.file("DESCRIPTION", package = "cli"))'`.
+- [ ] **Step 8: Confirm `cli::hash_file_sha256()` exists** in the installed cli (review found 3.6.6 installed; NEWS says 3.2.0 added it): `Rscript -e 'packageVersion("cli"); cli::hash_file_sha256(system.file("DESCRIPTION", package = "cli"))'`.
 
 - [ ] **Step 9: Record findings** in the ledger's Research section under "Phase 4c". Show Logan the findings and any plan changes before Task 1.
 
@@ -114,11 +134,12 @@ Expected: `data-file="scene.py" data-scene="Tiny"` and the `style` attribute. `l
 - Create: `R/manim.R`
 - Modify: `R/config.R` (`lc_config_defaults`, `lc_config_validate`)
 - Modify: `R/check.R` (`lecturecast_check`)
-- Modify: `DESCRIPTION` (Imports: `cli (>= 3.6.0)`)
+- Modify: `R/voice.R` (initialise `lc_state$manim_engine`)
+- Modify: `DESCRIPTION` (Imports: `cli (>= 3.2.0)`)
 - Test: `tests/testthat/test-manim.R`, `tests/testthat/test-config.R`, `tests/testthat/test-check.R`
 
 **Interfaces:**
-- Produces: `lc_manim_version` (chr), `lc_manim_command()` -> character vector `c(command, leading args)`, `lc_find_manim()` -> chr ("" if absent), `lc_manim_engine()` -> chr version label, `cfg$manim$background` (NULL or hex string), `cfg$manim$timeout` (number of seconds, default 900).
+- Produces: `lc_manim_version` (chr), `lc_manim_command()` -> character vector `c(command, leading args)`, `lc_find_manim()` -> chr ("" if absent), `lc_manim_engine()` -> chr version label, `cfg$manim$background` (NULL or hex string), `cfg$manim$timeout` (number of seconds, default 900), `cfg$video$manim` (logical, default TRUE).
 
 - [ ] **Step 1: Write the failing tests** in `tests/testthat/test-manim.R`:
 
@@ -159,6 +180,16 @@ test_that("manim settings have defaults and are checked", {
   expect_error(lecturecast_config(config = write_config(c("voice:", "  provider: edge", "manim:", "  timeout: 0"))),
                "manim: timeout: must be a number of seconds")
 })
+
+test_that("Manim and Plotly animations switch off separately", {
+  cfg <- lecturecast_config(config = write_config(c("voice:", "  provider: edge")))
+  expect_true(cfg$video$manim)
+  off <- lecturecast_config(config = write_config(c("voice:", "  provider: edge", "video:", "  manim: false")))
+  expect_false(off$video$manim)
+  expect_true(off$video$animations)
+  expect_error(lecturecast_config(config = write_config(c("voice:", "  provider: edge", "video:", "  manim: maybe"))),
+               "video: manim: must be true or false")
+})
 ```
 
 In `tests/testthat/test-check.R`, change the expected items in "check reports every item without external tools" to:
@@ -166,7 +197,8 @@ In `tests/testthat/test-check.R`, change the expected items in "check reports ev
 ```r
   expect_equal(
     out$item,
-    c("quarto", "chrome", "ffmpeg", "ffprobe", "edge-tts", "manim", "latex", "dvisvgm", "ELEVENLABS_API_KEY")
+    c("quarto", "chrome", "ffmpeg", "ffprobe", "edge-tts", "manim", "latex", "dvisvgm", "ELEVENLABS_API_KEY",
+      "YT_CLIENT_ID, YT_CLIENT_SECRET")
   )
 ```
 
@@ -190,7 +222,7 @@ Expected: FAIL, `could not find function "lc_manim_command"` and the item list m
 # quote its name. The scene is laid over the slide capture at the div's box,
 # or over the whole frame with fill="frame".
 
-lc_manim_version <- "0.20.1"
+lc_manim_version <- "0.22.0"
 
 # The manim command as c(command, leading args): manim on PATH, else the
 # pinned version through uvx.
@@ -224,7 +256,9 @@ lc_manim_engine <- function() {
 }
 ```
 
-(Use the version Task 0 recorded in place of `"0.20.1"` if it differs.)
+(Use the version Task 0 recorded in place of `"0.22.0"` if it differs.)
+
+In `R/voice.R`, beside `lc_state$edge_engine <- list()` (R/voice.R:30), add `lc_state$manim_engine <- list()`. R/manim.R loads before R/voice.R (no Collate field), so it cannot set this at top level itself; without it, a second manim path in one session hits "subscript out of bounds".
 
 In `R/config.R`, `lc_config_defaults()`: add `manim <- raw$manim %||% list()` beside the other blocks, and add to the returned list:
 
@@ -234,6 +268,8 @@ In `R/config.R`, `lc_config_defaults()`: add `manim <- raw$manim %||% list()` be
       timeout = manim$timeout %||% 900
     ),
 ```
+
+In the `video = list(...)` block, after `animations = video$animations %||% TRUE,` (R/config.R:67), add `manim = video$manim %||% TRUE,`. In `lc_config_validate()`, change `for (k in c("fragments", "animations"))` (R/config.R:130) to `for (k in c("fragments", "animations", "manim"))`.
 
 In `lc_config_validate()`, before `invisible(TRUE)`:
 
@@ -256,7 +292,7 @@ In `R/check.R`, update the roxygen sentence to name Manim, LaTeX and dvisvgm, an
     lc_row("dvisvgm", lc_find_tool("dvisvgm"), "math text in Manim scenes"),
 ```
 
-In `DESCRIPTION`, change `cli,` to `cli (>= 3.6.0),` (or the version Task 0 recorded).
+In `DESCRIPTION`, change `cli,` to `cli (>= 3.2.0),` (or the version Task 0 recorded).
 
 - [ ] **Step 4: Run the tests to see them pass**
 
@@ -266,7 +302,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit** (with Logan's approval)
 
 ```bash
-git add R/manim.R R/config.R R/check.R DESCRIPTION man/lecturecast_check.Rd tests/testthat/test-manim.R tests/testthat/test-config.R tests/testthat/test-check.R
+git add R/manim.R R/config.R R/check.R R/voice.R DESCRIPTION man/lecturecast_check.Rd tests/testthat/test-manim.R tests/testthat/test-config.R tests/testthat/test-check.R
 git commit -m "Phase 4c: manim command, settings and check rows"
 ```
 
@@ -291,7 +327,7 @@ git commit -m "Phase 4c: manim command, settings and check rows"
 - [ ] **Step 1: Write the failing tests** (append to `tests/testthat/test-manim.R`):
 
 ```r
-div <- function(...) list(modifyList(list(file = "scenes/a.py", scene = "A", inputs = "", fill = ""), list(...)))
+div <- function(...) list(modifyList(list(file = "scenes/a.py", scene = "A", inputs = "", fill = "", fragment = FALSE), list(...)))
 
 test_that("a slide's manim div becomes a spec", {
   expect_null(lc_manim_spec(list(), 1, "d.html"))
@@ -309,6 +345,7 @@ test_that("bad manim divs stop the build", {
   expect_error(lc_manim_spec(div(file = ""), 3, "d.html"), "no file= attribute")
   expect_error(lc_manim_spec(div(fill = "page"), 3, "d.html"), "fill= must be box or frame")
   expect_error(lc_manim_spec(div(scene = "A; rm"), 3, "d.html"), "not a Python class name")
+  expect_error(lc_manim_spec(div(fragment = TRUE), 3, "d.html"), "inside a fragment")
 })
 
 test_that("scene paths are relative to the settings file, inputs to the scene", {
@@ -355,7 +392,8 @@ Expected: FAIL, `could not find function "lc_manim_spec"`.
         manim: Array.from(s.querySelectorAll('div.manim')).map(d => {
           // Pandoc writes key=value attributes as data-key in HTML.
           const a = n => d.getAttribute('data-' + n) || d.getAttribute(n) || '';
-          return {file: a('file'), scene: a('scene'), inputs: a('inputs'), fill: a('fill')};
+          return {file: a('file'), scene: a('scene'), inputs: a('inputs'), fill: a('fill'),
+                  fragment: d.closest('.fragment') !== null};
         })
 ```
 
@@ -384,6 +422,10 @@ lc_manim_spec <- function(m, slide, deck) {
   }
   if (!grepl("^[A-Za-z_][A-Za-z0-9_]*$", m$scene)) {
     lc_abort(step, sprintf("scene=\"%s\" on slide %d is not a Python class name.", m$scene, slide), file = deck, fix = example)
+  }
+  if (isTRUE(m$fragment)) {
+    lc_abort(step, sprintf("The Manim div on slide %d is inside a fragment; the scene would show before the fragment does.", slide),
+             file = deck, fix = "Move the div out of the fragment. Use the scene's sections to reveal things in step with the notes.")
   }
   fill <- if (is.null(m$fill) || !nzchar(m$fill)) "box" else m$fill
   if (!fill %in% c("box", "frame")) {
@@ -467,8 +509,8 @@ git commit -m "Phase 4c: read Manim divs and measure their box"
 - Test: `tests/testthat/test-manim.R`
 
 **Interfaces:**
-- Consumes: `lc_quotes(text)` (data frame `phrase`, `pos`), `lc_label_key(x)` (both in `R/animate.R`).
-- Produces: `lc_manim_runs(texts, names, slide, deck = NULL)` -> data frame with columns `seg` (int, 1-based segment within the slide), `pos` (num, cue position in non-space characters, 0 for the opening), `from`, `to` (int section indices), `cued` (logical).
+- Consumes: `lc_quotes(text)` (data frame `phrase`, `pos`), `lc_label_key(x)` (both in `R/animate.R`); tag tables from `lc_parse_tags()` (`R/tags.R`: `label`, `over`, `pos`, where `pos` counts the spoken text with tags removed).
+- Produces: `lc_manim_runs(texts, names, slide, deck = NULL, tags = NULL)` -> data frame with columns `seg` (int, 1-based segment within the slide), `pos` (num, cue position in non-space characters, 0 for the opening), `from`, `to` (int section indices), `cued` (logical), `tag` (logical, cued by a `[play:]` tag), `over` (logical, the tag's `over`; FALSE otherwise). `tags` is a list with one tag table per segment, or NULL.
 
 - [ ] **Step 1: Write the failing tests:**
 
@@ -519,6 +561,42 @@ test_that("silent segments (empty text) cue nothing", {
   r <- lc_manim_runs("", c("a", "b"), 1)
   expect_equal(c(r$from, r$to), c(1L, 2L))
 })
+
+test_that("a mistyped cue cues nothing and its section plays straight on", {
+  r <- lc_manim_runs("Now \"grwo\" it. Then \"spin\" it.", c("opening", "grow", "spin"), 1)
+  expect_equal(sum(r$cued), 1)
+  expect_equal(r$from, c(1L, 3L))
+  expect_equal(r$to, c(2L, 3L))
+})
+
+tagged <- function(text) lc_parse_tags(text)
+
+test_that("play tags cue sections exactly, with over", {
+  p <- tagged("First the square. [play: grow] Now it grows. [play: Spin, over] And it turns.")
+  r <- lc_manim_runs(p$text, c("opening", "grow", "spin"), 1, tags = list(p$tags))
+  expect_equal(r$from, 1:3)
+  expect_equal(r$tag, c(FALSE, TRUE, TRUE))
+  expect_equal(r$over, c(FALSE, FALSE, TRUE))
+  expect_equal(r$pos[2:3], p$tags$pos)
+})
+
+test_that("a segment with tags ignores its quotes; one without uses them", {
+  a <- tagged("Here \"spin\" is only a word. [play: grow] Done.")
+  b <- tagged("Then \"spin\" it.")
+  r <- lc_manim_runs(c(a$text, b$text), c("opening", "grow", "spin"), 1, tags = list(a$tags, b$tags))
+  expect_equal(r$seg, c(1L, 1L, 2L))
+  expect_equal(r$tag, c(FALSE, TRUE, FALSE))
+  expect_equal(r$cued, c(FALSE, TRUE, TRUE))
+})
+
+test_that("an unknown tag or a section tagged twice stops the build", {
+  p <- tagged("[play: grwo] Now.")
+  expect_error(lc_manim_runs(p$text, c("opening", "grow"), 4, "d.html", tags = list(p$tags)),
+               "Slide 4 has \\[play: grwo\\], but scene has no section of that name")
+  q <- tagged("[play: grow] Now. [play: grow] Again.")
+  expect_error(lc_manim_runs(q$text, c("opening", "grow"), 4, "d.html", tags = list(q$tags)),
+               "plays section \"grow\" twice")
+})
 ```
 
 - [ ] **Step 2: Run to see them fail**
@@ -530,20 +608,37 @@ Expected: FAIL, `could not find function "lc_manim_runs"`.
 
 ```r
 # Which sections play when, for one slide. `texts` holds the narration of
-# the slide's segments in order ("" for silent ones). A section plays when
-# the notes first quote its name; sections nobody quotes play straight on
-# after the one before; sections before the first cue open the slide.
-# Returns one row per run: its segment, cue position, first and last section.
-lc_manim_runs <- function(texts, names, slide, deck = NULL) {
+# the slide's segments in order ("" for silent ones), tags already removed.
+# A segment with [play: name] tags is cued by its tags only, exactly; one
+# without is cued by the first quote of each section's name. Sections
+# nobody cues play straight on after the one before; sections before the
+# first cue open the slide. Returns one row per run: its segment, cue
+# position, first and last section, and how it was cued.
+lc_manim_runs <- function(texts, names, slide, deck = NULL, tags = NULL) {
   key <- lc_label_key(names)
-  cued <- data.frame(seg = integer(0), pos = numeric(0), sec = integer(0))
+  cued <- data.frame(seg = integer(0), pos = numeric(0), sec = integer(0), tag = logical(0), over = logical(0))
   for (s in seq_along(texts)) {
+    tg <- if (is.null(tags)) NULL else tags[[s]]
+    if (!is.null(tg) && nrow(tg)) {
+      for (k in seq_len(nrow(tg))) {
+        hit <- match(lc_label_key(tg$label[k]), key)
+        if (is.na(hit)) {
+          lc_abort("script", sprintf("Slide %d has [play: %s], but scene has no section of that name.", slide, tg$label[k]),
+                   file = deck, fix = paste0("Use one of the scene's sections: ", paste(sprintf("\"%s\"", names), collapse = ", "), "."))
+        }
+        if (hit %in% cued$sec) {
+          lc_abort("script", sprintf("Slide %d plays section \"%s\" twice; a section plays once.", slide, names[hit]), file = deck)
+        }
+        cued <- rbind(cued, data.frame(seg = s, pos = tg$pos[k], sec = hit, tag = TRUE, over = isTRUE(tg$over[k])))
+      }
+      next
+    }
     q <- lc_quotes(texts[s])
     for (k in seq_len(nrow(q))) {
       hit <- match(lc_label_key(q$phrase[k]), key)
       # A section already cued is a back-reference, not a second cue.
       if (is.na(hit) || hit %in% cued$sec) next
-      cued <- rbind(cued, data.frame(seg = s, pos = q$pos[k], sec = hit))
+      cued <- rbind(cued, data.frame(seg = s, pos = q$pos[k], sec = hit, tag = FALSE, over = FALSE))
     }
   }
   if (is.unsorted(cued$sec, strictly = TRUE)) {
@@ -556,7 +651,9 @@ lc_manim_runs <- function(texts, names, slide, deck = NULL) {
   hit <- match(from, cued$sec)
   data.frame(seg = ifelse(is.na(hit), 1L, cued$seg[hit]),
              pos = ifelse(is.na(hit), 0, cued$pos[hit]),
-             from = from, to = to, cued = !is.na(hit))
+             from = from, to = to, cued = !is.na(hit),
+             tag = !is.na(hit) & cued$tag[hit] %in% TRUE,
+             over = !is.na(hit) & cued$over[hit] %in% TRUE)
 }
 ```
 
@@ -571,6 +668,28 @@ Expected: PASS.
 git add R/manim.R tests/testthat/test-manim.R
 git commit -m "Phase 4c: plan which Manim sections play at which cue"
 ```
+
+- [ ] **Step 6: Let a tagged voice wait for an opening run.** On a scene slide whose first segment is tagged, the uncued opening sections play from the start of the narration, and a tag that comes before they finish must wait for them. In `R/tags.R`, give `lc_voice_tagged()` a last argument `busy = 0` and change `anim_end <- 0` (R/tags.R:84) to `anim_end <- busy`. Plotly calls are unchanged (default 0). Test in `tests/testthat/test-tags.R`:
+
+```r
+test_that("a tag waits for an animation already playing at the start", {
+  skip_if_no_ffmpeg()
+  dir <- withr::local_tempdir()
+  cfg <- lecturecast_config(config = write_config(c("voice:", "  provider: edge"), dir = dir))
+  piece <- function(txt, out) {
+    processx::run("ffmpeg", c("-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=duration=1", out))
+    list(file = out, timing = NULL, cached = TRUE)
+  }
+  ev <- data.frame(label = "grow", over = FALSE)
+  cap <- list(list(files = rep("f", 10), seconds = 0.1))
+  # Piece 1 ends at 1 s, but the opening runs 3 s: "grow" starts at 3 s.
+  tv <- lc_voice_tagged(c("one", "two"), ev, cap, piece, cfg, file.path(dir, "s"), busy = 3)
+  expect_equal(tv$at, 3, tolerance = 1e-6)
+  expect_equal(lc_duration(tv$file, "t"), 3 + 1 + 0.15 + 1, tolerance = 0.1)
+})
+```
+
+Commit with Task 3 (add `R/tags.R` and `tests/testthat/test-tags.R` to the `git add`).
 
 ---
 
@@ -587,6 +706,7 @@ git commit -m "Phase 4c: plan which Manim sections play at which cue"
   - `lc_manim_run(paths, spec, rect, cfg, media)` -> path to Manim's section list JSON.
   - `lc_manim_sections(json, spec, scene_file)` -> data frame `name`, `file` (absolute), scene order, only sections with video.
   - `lc_manim_render(paths, spec, rect, cfg, cache)` -> data frame `name`, `file` (absolute, inside the cache), `seconds`; attribute `"cached"` (logical).
+  - `lc_manim_lookup(paths, spec, rect, cfg, cache)` -> the same data frame from the cache, or NULL; never runs Manim (for `video: manim: false`).
 
 - [ ] **Step 1: Write the failing tests.** Helpers first (top of the new block in `tests/testthat/test-manim.R`):
 
@@ -606,13 +726,15 @@ manim_fixture <- function(dir = withr::local_tempdir(.local_envir = parent.frame
 fake_manim_run <- function(paths, spec, rect, cfg, media) {
   out <- file.path(media, "videos", "tiny", "fake", "sections")
   dir.create(out, recursive = TRUE)
-  for (k in 1:2) {
+  # Real Manim saves the Create before the first next_section() as a section
+  # with its own video. Task 0 records that section's name.
+  for (k in 0:2) {
     processx::run("ffmpeg", c("-y", "-loglevel", "error", "-f", "lavfi",
-                              "-i", sprintf("color=c=%s:s=%dx%d:r=%s:d=0.5", c("red", "blue")[k], rect[["w"]], rect[["h"]], cfg$video$fps),
+                              "-i", sprintf("color=c=%s:s=%dx%d:r=%s:d=0.5", c("green", "red", "blue")[k + 1], rect[["w"]], rect[["h"]], cfg$video$fps),
                               "-pix_fmt", "yuv420p", file.path(out, sprintf("Tiny_%04d.mp4", k))))
   }
   json <- file.path(out, "Tiny.json")
-  writeLines('[{"name": "autocreated", "video": null},
+  writeLines('[{"name": "autocreated", "video": "Tiny_0000.mp4"},
                {"name": "grow", "video": "Tiny_0001.mp4"},
                {"name": "spin", "video": "Tiny_0002.mp4"}]', json)
   json
@@ -638,7 +760,23 @@ test_that("the render key ignores notes but follows every input to the pictures"
   k2 <- lc_manim_key(f$paths, f$spec, rect, f$cfg)
   expect_false(k == k2)
   writeLines("x,y\n1,3", file.path(f$dir, "scenes", "data", "d.csv"))
-  expect_false(k2 == lc_manim_key(f$paths, f$spec, rect, f$cfg))
+  k3 <- lc_manim_key(f$paths, f$spec, rect, f$cfg)
+  expect_false(k2 == k3)
+  writeLines(c("[CLI]", "frame_rate = 15"), file.path(f$dir, "scenes", "manim.cfg"))
+  expect_false(k3 == lc_manim_key(f$paths, f$spec, rect, f$cfg))
+})
+
+test_that("a background colour goes to Manim through a config file", {
+  f <- manim_fixture()
+  f$cfg$manim$background <- "#1e1e1e"
+  media <- withr::local_tempdir()
+  seen <- NULL
+  local_mocked_bindings(lc_manim_command = function() "/fake/manim",
+                        lc_run = function(cmd, args, ...) { seen <<- args; list(stdout = "", stderr = "") })
+  expect_error(lc_manim_run(f$paths, f$spec, c(x = 0L, y = 0L, w = 320L, h = 180L), f$cfg, media), "no section list")
+  expect_false("--background_color" %in% seen)
+  cf <- seen[which(seen == "--config_file") + 1]
+  expect_equal(readLines(cf), c("[CLI]", "background_color = #1e1e1e"))
 })
 
 test_that("the section list keeps sections with video, in scene order", {
@@ -674,8 +812,8 @@ test_that("a render is stored once and reused", {
   expect_equal(calls, 1)
   expect_false(attr(a, "cached"))
   expect_true(attr(b, "cached"))
-  expect_equal(b$name, c("grow", "spin"))
-  expect_equal(b$seconds, c(0.5, 0.5), tolerance = 0.05)
+  expect_equal(b$name, c("autocreated", "grow", "spin"))
+  expect_equal(b$seconds, c(0.5, 0.5, 0.5), tolerance = 0.05)
   expect_true(all(startsWith(b$file, file.path(cache, "manim"))))
 })
 
@@ -700,6 +838,21 @@ test_that("a damaged cached render stops with the folder to delete", {
   r <- lc_manim_render(f$paths, f$spec, rect, f$cfg, cache)
   file.remove(r$file[2])
   expect_error(lc_manim_render(f$paths, f$spec, rect, f$cfg, cache), "cached section video is missing")
+})
+
+test_that("a cached index with bad values stops with the folder to delete", {
+  skip_if_no_ffmpeg()
+  local_mocked_bindings(lc_manim_engine = function() "manim==test", lc_manim_run = fake_manim_run)
+  f <- manim_fixture()
+  cache <- withr::local_tempdir()
+  rect <- c(x = 0L, y = 0L, w = 320L, h = 180L)
+  r <- lc_manim_render(f$paths, f$spec, rect, f$cfg, cache)
+  index <- file.path(dirname(r$file[1]), "sections.json")
+  m <- jsonlite::fromJSON(index)
+  m$sections$seconds[1] <- NA
+  writeLines(jsonlite::toJSON(m, dataframe = "rows", auto_unbox = TRUE, na = "null"), index)
+  err <- expect_error(lc_manim_render(f$paths, f$spec, rect, f$cfg, cache), "damaged")
+  expect_match(conditionMessage(err), "Delete the folder", fixed = TRUE)
 })
 
 test_that("a failed manim run shows its error and the fix", {
@@ -729,9 +882,10 @@ Expected: FAIL, `could not find function "lc_manim_key"`.
 
 ```r
 # The render cache key: everything that changes the pictures. Every .py file
-# beside the scene counts, so a change to a helper module re-renders.
+# beside the scene counts, so a change to a helper module re-renders, and so
+# does a manim.cfg there, which Manim reads from its working directory.
 lc_manim_key <- function(paths, spec, rect, cfg) {
-  py <- sort(list.files(dirname(paths$scene), pattern = "\\.py$", full.names = TRUE))
+  py <- sort(list.files(dirname(paths$scene), pattern = "(\\.py|^manim\\.cfg)$", full.names = TRUE))
   hashes <- function(f, nm) stats::setNames(as.list(vapply(f, cli::hash_file_sha256, "", USE.NAMES = FALSE)), nm)
   parts <- list(
     engine = lc_manim_engine(), scene = spec$scene, file = basename(paths$scene),
@@ -745,11 +899,17 @@ lc_manim_key <- function(paths, spec, rect, cfg) {
 lc_manim_run <- function(paths, spec, rect, cfg, media) {
   step <- "manim"
   cmd <- lc_manim_command()
+  # Manim 0.22 has no background flag; the colour goes in a config file.
+  bg <- NULL
+  if (!is.null(cfg$manim$background)) {
+    bg <- file.path(media, "lecturecast.cfg")
+    writeLines(c("[CLI]", paste0("background_color = ", cfg$manim$background)), bg)
+  }
   args <- c(cmd[-1], "render", "--save_sections", "--format", "mp4", "--disable_caching",
             "--progress_bar", "none",
             "--resolution", sprintf("%d,%d", rect[["w"]], rect[["h"]]),
             "--frame_rate", as.character(cfg$video$fps), "--media_dir", media,
-            if (!is.null(cfg$manim$background)) c("--background_color", cfg$manim$background),
+            if (!is.null(bg)) c("--config_file", bg),
             basename(paths$scene), spec$scene)
   lc_run(cmd[1], args, step = step, file = paths$scene, timeout = cfg$manim$timeout, wd = dirname(paths$scene),
          fix = "Run the scene with manim in a terminal to see the whole error. For math text, check latex and dvisvgm with lecturecast_check().")
@@ -792,8 +952,8 @@ lc_manim_render <- function(paths, spec, rect, cfg, cache) {
   dir <- file.path(cache, "manim", key)
   index <- file.path(dir, "sections.json")
   if (file.exists(index)) return(structure(lc_manim_cached(dir, index), cached = TRUE))
-  tmp <- paste0(dir, ".tmp")
-  unlink(tmp, recursive = TRUE)
+  # A folder of its own per render, so two builds never share one.
+  tmp <- tempfile("render-", tmpdir = lc_dir_create(dirname(dir)))
   on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
   json <- lc_manim_run(paths, spec, rect, cfg, lc_dir_create(file.path(tmp, "media")))
   secs <- lc_manim_sections(json, spec, paths$scene)
@@ -810,8 +970,11 @@ lc_manim_render <- function(paths, spec, rect, cfg, cache) {
   secs$file <- stored
   writeLines(jsonlite::toJSON(list(scene = spec$scene, sections = secs), dataframe = "rows", auto_unbox = TRUE, digits = NA),
              file.path(out, "sections.json"))
-  lc_dir_create(dirname(dir))
-  if (!file.rename(out, dir)) lc_abort(step, "Could not store the render in the cache.", file = dir)
+  if (!file.rename(out, dir)) {
+    # Another build may have stored the same render meanwhile; use it.
+    if (file.exists(index)) return(structure(lc_manim_cached(dir, index), cached = TRUE))
+    lc_abort(step, "Could not store the render in the cache.", file = dir)
+  }
   secs$file <- file.path(dir, stored)
   structure(secs, cached = FALSE)
 }
@@ -821,9 +984,11 @@ lc_manim_cached <- function(dir, index) {
   fix <- paste0("Delete the folder ", dir, " and build again; the scene will be rendered afresh.")
   m <- tryCatch(jsonlite::fromJSON(index), error = function(e) lc_abort(step, "The cached render is damaged.", file = index, fix = fix))
   secs <- m$sections
-  if (!is.data.frame(secs) || nrow(secs) == 0 || !all(c("name", "file", "seconds") %in% names(secs))) {
-    lc_abort(step, "The cached render is damaged.", file = index, fix = fix)
-  }
+  ok <- is.data.frame(secs) && nrow(secs) > 0 && all(c("name", "file", "seconds") %in% names(secs)) &&
+    is.character(secs$name) && all(!is.na(secs$name) & nzchar(secs$name)) &&
+    is.character(secs$file) && all(!is.na(secs$file) & nzchar(secs$file)) &&
+    is.numeric(secs$seconds) && all(is.finite(secs$seconds) & secs$seconds > 0)
+  if (!ok) lc_abort(step, "The cached render is damaged.", file = index, fix = fix)
   secs$file <- file.path(dir, secs$file)
   for (k in seq_len(nrow(secs))) {
     if (!file.exists(secs$file[k])) lc_abort(step, "A cached section video is missing.", file = secs$file[k], fix = fix)
@@ -834,6 +999,40 @@ lc_manim_cached <- function(dir, index) {
   }
   secs[, c("name", "file", "seconds")]
 }
+
+# For video: manim: false. The scene's cached render, or NULL when there is
+# none. Never runs or requires Manim: with no manim and no uv, there is no
+# engine to key on, so there is no render to find.
+lc_manim_lookup <- function(paths, spec, rect, cfg, cache) {
+  key <- tryCatch(lc_manim_key(paths, spec, rect, cfg), lecturecast_error = function(e) NULL)
+  if (is.null(key)) return(NULL)
+  dir <- file.path(cache, "manim", key)
+  index <- file.path(dir, "sections.json")
+  if (!file.exists(index)) return(NULL)
+  lc_manim_cached(dir, index)
+}
+```
+
+Tests for the lookup (Task 4 Step 1):
+
+```r
+test_that("with Manim off, a cached render is found without running Manim", {
+  skip_if_no_ffmpeg()
+  local_mocked_bindings(lc_manim_engine = function() "manim==test", lc_manim_run = fake_manim_run)
+  f <- manim_fixture()
+  cache <- withr::local_tempdir()
+  rect <- c(x = 0L, y = 0L, w = 320L, h = 180L)
+  expect_null(lc_manim_lookup(f$paths, f$spec, rect, f$cfg, cache))
+  lc_manim_render(f$paths, f$spec, rect, f$cfg, cache)
+  local_mocked_bindings(lc_manim_run = function(...) stop("not called"))
+  expect_equal(lc_manim_lookup(f$paths, f$spec, rect, f$cfg, cache)$name, c("autocreated", "grow", "spin"))
+})
+
+test_that("with Manim off and no Manim installed, the lookup finds nothing and does not stop", {
+  f <- manim_fixture()
+  local_mocked_bindings(lc_find_tool = function(tool) "")
+  expect_null(lc_manim_lookup(f$paths, f$spec, c(x = 0L, y = 0L, w = 320L, h = 180L), f$cfg, withr::local_tempdir()))
+})
 ```
 
 - [ ] **Step 4: Run to see them pass**
@@ -862,6 +1061,8 @@ git commit -m "Phase 4c: render Manim sections through a checked cache"
   - `lc_frames(video, dir, prefix, fps)` -> `list(files = chr, seconds = 1 / fps)`.
   - `lc_overlay_png(base, top, rect, out)` -> `out`.
   - `lc_manim_clip(schedule, base, rect, out, cfg, audio = NULL)` -> clip duration in seconds.
+  - `lc_last_frame(video, out)` -> `out`, the video's last frame as a PNG (for `video: manim: false`).
+  - `lc_manim_timing_notes(schedule, a_dur, cfg, max_still = 30)` -> character vector of notes (empty when the timing is fine).
 
 - [ ] **Step 1: Write the failing tests:**
 
@@ -883,6 +1084,47 @@ test_that("every frame of a section becomes a picture", {
   fr <- lc_frames(v, file.path(dir, "frames"), "s01-001", 10)
   expect_length(fr$files, 10)
   expect_equal(fr$seconds, 0.1)
+})
+
+test_that("frames left from an earlier, longer render are removed", {
+  skip_if_no_ffmpeg()
+  dir <- withr::local_tempdir()
+  v <- file.path(dir, "s.mp4")
+  ff("-f", "lavfi", "-i", "testsrc=s=160x90:r=10:d=1", "-pix_fmt", "yuv420p", v)
+  dir.create(file.path(dir, "frames"))
+  file.create(file.path(dir, "frames", sprintf("s01-001-%05d.png", 1:30)))
+  expect_length(lc_frames(v, file.path(dir, "frames"), "s01-001", 10)$files, 10)
+})
+
+test_that("a section cued while the one before is still playing waits for it", {
+  cfg <- lecturecast_config(config = write_config(c("voice:", "  provider: edge", "video:", "  lead_in: 0", "  fps: 10"),
+                                                  dir = withr::local_tempdir()))
+  ev <- data.frame(label = c("a", "b"), pos = c(0, 4))
+  cap <- list(list(files = sprintf("a%02d", 1:30), seconds = 0.1), list(files = "b01", seconds = 0.1))
+  s <- lc_animation_schedule("still", ev, cap, "aaaa bbbb", NULL, 2, cfg)
+  # "b" is cued at 1 s, but "a" runs 3 s, so "b" shows at 3 s.
+  expect_equal(sum(s$seconds[seq_len(which(s$files == "b01")[1] - 1)]), 3, tolerance = 1e-6)
+})
+
+test_that("the last frame of a section video becomes a picture", {
+  skip_if_no_ffmpeg()
+  dir <- withr::local_tempdir()
+  v <- file.path(dir, "s.mp4")
+  ff("-f", "lavfi", "-i", "color=c=red:s=160x90:r=10:d=0.5", "-f", "lavfi", "-i", "color=c=blue:s=160x90:r=10:d=0.5",
+     "-filter_complex", "[0:v][1:v]concat=n=2:v=1[v]", "-map", "[v]", "-pix_fmt", "yuv420p", v)
+  out <- lc_last_frame(v, file.path(dir, "last.png"))
+  expect_gt(pixel(out, 80, 45)[3], 180)
+})
+
+test_that("timing notes flag a long still picture and a scene that outruns the narration", {
+  cfg <- lecturecast_config(config = write_config(c("voice:", "  provider: edge", "video:", "  lead_in: 0.3", "  tail: 0.5"),
+                                                  dir = withr::local_tempdir()))
+  fine <- list(files = c("a", "b"), seconds = c(5, 5.8), total = 10.8)
+  expect_length(lc_manim_timing_notes(fine, 10, cfg), 0)
+  frozen <- list(files = c("a", "b"), seconds = c(2, 40.8), total = 42.8)
+  expect_match(lc_manim_timing_notes(frozen, 42, cfg), "still for about 41 s")
+  long <- list(files = c("a", "b"), seconds = c(1, 13.8), total = 14.8)
+  expect_match(lc_manim_timing_notes(long, 10, cfg), "runs about 4 s past the narration")
 })
 
 test_that("a still lays the scene frame over the slide at the box", {
@@ -929,11 +1171,14 @@ Expected: FAIL, `could not find function "lc_frames"`.
 lc_frames <- function(video, dir, prefix, fps) {
   step <- "manim"
   lc_dir_create(dir)
+  # A reused work folder may hold frames from a longer render of this section.
+  pattern <- paste0("^", prefix, "-[0-9]{5}\\.png$")
+  unlink(list.files(dir, pattern = pattern, full.names = TRUE))
   lc_run(lc_tool("ffmpeg", step),
          c("-y", "-hide_banner", "-loglevel", "error", "-i", video, "-vf", sprintf("fps=%s", fps),
            file.path(dir, paste0(prefix, "-%05d.png"))),
          step = step, file = video, timeout = 600)
-  files <- sort(list.files(dir, pattern = paste0("^", prefix, "-[0-9]{5}\\.png$"), full.names = TRUE))
+  files <- sort(list.files(dir, pattern = pattern, full.names = TRUE))
   if (length(files) == 0) lc_abort(step, "No frames could be read from the section video.", file = video)
   list(files = files, seconds = 1 / fps)
 }
@@ -989,6 +1234,34 @@ lc_manim_clip <- function(schedule, base, rect, out, cfg, audio = NULL) {
   }
   got
 }
+
+# The last frame of a section video, for a scene shown still when
+# video: manim: is false.
+lc_last_frame <- function(video, out) {
+  step <- "manim"
+  lc_run(lc_tool("ffmpeg", step),
+         c("-y", "-hide_banner", "-loglevel", "error", "-sseof", "-1", "-i", video, "-update", "1", out),
+         step = step, file = video, timeout = 60)
+  lc_dimensions(out, step)
+  out
+}
+
+# Notes on a voiced scene segment's timing, which lint cannot judge because
+# it never renders: a picture that stays still too long, or a scene that
+# keeps moving after the narration ends. Notes, not stops.
+lc_manim_timing_notes <- function(schedule, a_dur, cfg, max_still = 30) {
+  v <- cfg$video
+  notes <- character(0)
+  still <- max(schedule$seconds)
+  if (still > max_still) {
+    notes <- c(notes, sprintf("the picture stays still for about %d s; add a section or move a cue", round(still)))
+  }
+  over <- schedule$total - (v$lead_in + a_dur + v$tail)
+  if (over > 1) {
+    notes <- c(notes, sprintf("the scene runs about %d s past the narration; shorten it or say more", round(over)))
+  }
+  notes
+}
 ```
 
 - [ ] **Step 4: Run to see them pass**
@@ -1009,12 +1282,15 @@ git commit -m "Phase 4c: Manim frames laid over the slide capture"
 
 **Files:**
 - Modify: `R/build.R` (`build_video`)
+- Modify: `R/manim.R` (`lc_manim_shot_prep`, `lc_manim_shot_done`)
+- Modify: `R/lint.R` (`lc_lint_slides`)
 - Create: `tests/testthat/fixtures/manim/scene.py`, `tests/testthat/fixtures/manim/manim.qmd`
 - Create: `tests/testthat/test-manim-integration.R`
+- Modify: `tests/testthat/test-lint.R`
 
 **Interfaces:**
-- Consumes: everything from Tasks 2 to 5, plus `lc_animation_schedule()` unchanged.
-- Produces: `build_video()` handles `.manim` slides; its return value's `segments` gains column `base` (the slide capture before compositing).
+- Consumes: everything from Tasks 2 to 5, plus `lc_animation_schedule()` unchanged and `lc_voice_tagged(..., busy)` (Task 3 Step 6).
+- Produces: `build_video()` handles `.manim` slides; its return value's `segments` gains column `base` (the slide capture before compositing). `lc_manim_shot_prep(b, rect, placeholder, deck)` and `lc_manim_shot_done(b, deck)`.
 
 - [ ] **Step 1: Write the fixtures.**
 
@@ -1044,8 +1320,6 @@ format:
     embed-resources: true
 ---
 
-## Title {data-silent="1"}
-
 ## In a box
 
 ::: {.manim file="scene.py" scene="Tiny" style="width: 100%; height: 300px;"}
@@ -1072,8 +1346,10 @@ manim_deck <- function(dir) {
   rec <- file.path(dir, "audio", "manim")
   dir.create(rec, recursive = TRUE)
   processx::run("ffmpeg", c("-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=duration=2", file.path(rec, "s02.wav")))
+  # Quarto's title slide has no notes; slide 1 is silent for 1 s.
   write_config(c("voice:", "  provider: recorded", "  recorded_dir: audio",
-                 "video:", "  resolution: 720p", "  crossfade: 0"), dir = dir)
+                 "video:", "  resolution: 720p", "  crossfade: 0",
+                 "  silent:", "    \"1\": 1"), dir = dir)
   file.path(dir, "manim.html")
 }
 
@@ -1096,11 +1372,11 @@ test_that("a deck with boxed and full-frame scenes builds (Manim faked)", {
   )
   expect_true(all(file.exists(c(r$video, r$captions, r$transcript))))
   expect_equal(lc_dimensions(r$video, "t"), c(1280L, 720L))
-  # Slide 2: 0.3 lead-in + 2 s narration + 0.5 tail; the two 0.5 s sections fit inside.
-  # Slide 3: silent 1 s, but its scene runs 0.3 + 1 + 0.5 = 1.8 s.
-  expect_equal(r$seconds, 1 + 2.8 + 1.8, tolerance = 0.3)
-  expect_true(any(grepl("Slide 2: scene Tiny, 2 sections, 2 cued", msgs, fixed = TRUE)))
-  expect_true(any(grepl("Slide 3: scene Tiny, 2 sections, 0 cued", msgs, fixed = TRUE)))
+  # Slide 2: 0.3 lead-in + 2 s narration + 0.5 tail; the three 0.5 s sections fit inside.
+  # Slide 3: silent 1 s, but its scene runs 0.3 + 1.5 + 0.5 = 2.3 s.
+  expect_equal(r$seconds, 1 + 2.8 + 2.3, tolerance = 0.3)
+  expect_true(any(grepl("Slide 2: scene Tiny, 3 sections, 2 cued", msgs, fixed = TRUE)))
+  expect_true(any(grepl("Slide 3: scene Tiny, 3 sections, 0 cued", msgs, fixed = TRUE)))
   # The boxed scene renders at the box's size, the full-frame one at 1280x720.
   sizes <- vapply(list.files(file.path(dir, "cache", "manim"), full.names = TRUE), function(d) {
     paste(lc_dimensions(file.path(d, "001.mp4"), "t"), collapse = "x")
@@ -1129,11 +1405,49 @@ test_that("the fixture deck builds with real Manim", {
   r <- build_video(deck, config = file.path(dir, "lecturecast.yml"), out_dir = file.path(dir, "out"),
                    cache_dir = file.path(dir, "cache"), quiet = TRUE)
   expect_true(file.exists(r$video))
-  # Real Manim also saves the opening Create as a section, so the silent
-  # slide's scene runs 0.3 + 1.5 + 0.5 = 2.3 s.
+  # As in the faked build, the silent slide's scene runs 0.3 + 1.5 + 0.5 = 2.3 s.
   expect_equal(r$seconds, 1 + 2.8 + 2.3, tolerance = 0.3)
 })
+
+test_that("with video: manim: false, scenes show a placeholder, then their last rendered frame", {
+  skip_if_no_deck_tools()
+  dir <- withr::local_tempdir()
+  deck <- manim_deck(dir)
+  build <- function(conf) build_video(deck, config = conf, out_dir = file.path(dir, "out"),
+                                      cache_dir = file.path(dir, "cache"))
+  off <- file.path(dir, "off.yml")
+  writeLines(c(readLines(file.path(dir, "lecturecast.yml")), "  manim: false"), off)
+  # No Manim at all: the off build must not need it.
+  local_mocked_bindings(lc_manim_command = function() lc_abort("manim", "Manim was not found."))
+  msgs <- testthat::capture_messages(r <- build(off))
+  expect_true(file.exists(r$video))
+  expect_true(any(grepl("Slide 2: Manim is off and scene Tiny has no render yet", msgs, fixed = TRUE)))
+  # Render once with Manim on, then off again: the last frame shows, Manim is not run.
+  local_mocked_bindings(lc_manim_command = function() "/fake/manim", lc_manim_engine = function() "manim==test",
+                        lc_manim_run = fake_manim_run)
+  build(file.path(dir, "lecturecast.yml"))
+  local_mocked_bindings(lc_manim_run = function(...) stop("not called"))
+  msgs <- testthat::capture_messages(r <- build(off))
+  expect_true(any(grepl("Slide 2: Manim is off; scene Tiny shows its last rendered frame", msgs, fixed = TRUE)))
+  # 0.3 + 2 + 0.5 for slide 2, still; slide 3 silent 1 s, still.
+  expect_equal(r$seconds, 1 + 2.8 + 1, tolerance = 0.3)
+})
+
+test_that("play tags cue sections on a scene slide", {
+  skip_if_no_deck_tools()
+  dir <- withr::local_tempdir()
+  deck <- manim_deck(dir, notes = "First the square. [play: grow] Now it grows. [play: spin, over] And it turns.")
+  local_mocked_bindings(lc_manim_engine = function() "manim==test", lc_manim_run = fake_manim_run)
+  msgs <- testthat::capture_messages(
+    r <- build_video(deck, config = file.path(dir, "lecturecast.yml"), out_dir = file.path(dir, "out"),
+                     cache_dir = file.path(dir, "cache"))
+  )
+  expect_true(file.exists(r$video))
+  expect_true(any(grepl("Slide 2: scene Tiny, 3 sections, 2 cued", msgs, fixed = TRUE)))
+})
 ```
+
+`manim_deck()` gains `notes = NULL`: when given, it replaces the fixture's notes line in the copied `manim.qmd` before rendering (`sub("First the square. Now \"grow\" it. Then \"spin\" it.", notes, ..., fixed = TRUE)`). The recorded provider places tags by estimate, so this test checks cueing, not the waiting voice; the waiting layout is covered by the `busy` unit test (Task 3 Step 6). A live Edge build of the example (Task 7 Step 4) exercises the tagged voice end to end.
 
 `fake_manim_run` is defined in `test-manim.R`; move it and `manim_fixture` into `tests/testthat/helper.R` so both files see it.
 
@@ -1142,40 +1456,94 @@ test_that("the fixture deck builds with real Manim", {
 Run: `Rscript -e 'devtools::test(filter = "manim-integration")'`
 Expected: FAIL: the boxed slide's video shows an empty slide and the messages are missing (no Manim handling yet).
 
-- [ ] **Step 4: Implement in `R/build.R`.** Four edits.
+- [ ] **Step 4: Implement.** Append to `R/manim.R`:
 
-(a) After `segs <- lc_segments(...)` and its `lc_say`, read every slide's scene before anything costs money:
+```r
+# Before a scene slide's screenshot: hide the slide number (no numbers on
+# scene slides), and with video: manim: false and no render, draw a
+# placeholder over the box. Chrome's viewport is the video size, so the box
+# in video pixels is also CSS pixels.
+lc_manim_shot_prep <- function(b, rect, placeholder, deck) {
+  ph <- if (is.null(placeholder)) "" else sprintf("
+    const p = document.createElement('div');
+    p.id = 'lc-manim-placeholder';
+    Object.assign(p.style, {position: 'fixed', left: '%dpx', top: '%dpx', width: '%dpx', height: '%dpx',
+      background: '#e8e8e8', color: '#555555', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      textAlign: 'center', font: '600 28px sans-serif', zIndex: '2147483647'});
+    p.textContent = 'Manim scene not rendered yet: ' + %s;
+    document.body.appendChild(p);", rect[["x"]], rect[["y"]], rect[["w"]], rect[["h"]],
+    jsonlite::toJSON(placeholder, auto_unbox = TRUE))
+  js <- sprintf("(() => {
+    document.querySelectorAll('.reveal .slide-number').forEach(e => e.style.visibility = 'hidden');
+    %s
+    return new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(true))));
+  })()", ph)
+  lc_js(b, js, "capture", deck)
+  invisible(TRUE)
+}
+
+# After the screenshot: put the slide number back and remove any placeholder.
+lc_manim_shot_done <- function(b, deck) {
+  lc_js(b, "(() => {
+    document.querySelectorAll('.reveal .slide-number').forEach(e => e.style.visibility = '');
+    const p = document.getElementById('lc-manim-placeholder');
+    if (p) p.remove();
+    return true;
+  })()", "capture", deck)
+  invisible(TRUE)
+}
+```
+
+Then six edits in `R/build.R`.
+
+(a) After `segs <- lc_segments(...)`, the tag parsing and its `lc_say` (R/build.R:58-68), read every slide's scene before anything costs money:
 
 ```r
   # Manim scenes: read and check every slide's div before voicing anything.
   manim <- lapply(seq_len(nrow(slides)), function(k) lc_manim_spec(slides$manim[[k]], k, deck))
   manim_paths <- lapply(manim, function(m) if (is.null(m)) NULL else lc_manim_paths(m, cfg))
+  both_on <- isTRUE(cfg$video$manim) && isTRUE(cfg$video$animations)
   for (k in which(!vapply(manim, is.null, logical(1)))) {
-    if (nrow(slides$buttons[[k]]) > 0) {
+    if (both_on && nrow(slides$buttons[[k]]) > 0) {
       lc_abort("manim", sprintf("Slide %d holds a Manim scene and a Plotly chart with buttons; a slide can animate one or the other.", k),
                file = deck)
     }
   }
   manim_rect <- list()
+  manim_found <- list()
 ```
 
-(b) In the capture loop, right after `lc_screenshot(b, segs$png[i], wh[1], wh[2], deck)`:
+(b) In the capture loop, replace the screenshot line (R/build.R:82) with the following, so scene slides are measured and prepared before their screenshot and never reach the Plotly code:
 
 ```r
     m <- manim[[segs$slide[i]]]
+    mkey <- as.character(segs$slide[i])
     if (!is.null(m)) {
-      key <- as.character(segs$slide[i])
-      if (is.null(manim_rect[[key]])) manim_rect[[key]] <- lc_manim_rect(b, m, wh, deck, segs$slide[i])
+      if (is.null(manim_rect[[mkey]])) {
+        manim_rect[[mkey]] <- lc_manim_rect(b, m, wh, deck, segs$slide[i])
+        if (!isTRUE(cfg$video$manim)) {
+          manim_found[mkey] <- list(lc_manim_lookup(manim_paths[[segs$slide[i]]], m, manim_rect[[mkey]], cfg, cache))
+        }
+      }
+      placeholder <- !isTRUE(cfg$video$manim) && is.null(manim_found[[mkey]])
+      lc_manim_shot_prep(b, manim_rect[[mkey]], if (placeholder) m$scene else NULL, deck)
+    }
+    lc_screenshot(b, segs$png[i], wh[1], wh[2], deck)
+    if (!is.null(m)) {
+      lc_manim_shot_done(b, deck)
       next
     }
 ```
 
-(c) After `lc_done(quiet, sprintf("Captured %d slide states ...` (Chrome is closed by then), add:
+(c) After `lc_done(quiet, sprintf("Captured %d slide states ...` (R/build.R:103; Chrome is closed by then), add:
 
 ```r
-  # Manim scenes render after Chrome closes. For each scene slide: render
-  # (or reuse), plan which sections play at which cue, split them into
-  # frames, and composite the first and last picture of each segment.
+  # Manim scenes render after Chrome closes and before voicing, because a
+  # tagged narration waits for the sections it cues. For each scene slide:
+  # render (or reuse), plan which sections play at which cue, split them
+  # into frames, and composite the first and last picture of each segment.
+  # With video: manim: false, show the cached render's last frame, or the
+  # placeholder drawn during capture.
   segs$base <- segs$png
   mevents <- vector("list", nrow(segs))
   mcaptured <- vector("list", nrow(segs))
@@ -1185,8 +1553,22 @@ Expected: FAIL: the boxed slide's video shows an empty slide and the messages ar
     k <- as.integer(key)
     rect <- manim_rect[[key]]
     rows <- which(segs$slide == k)
+    if (!isTRUE(cfg$video$manim)) {
+      found <- manim_found[[key]]
+      if (is.null(found)) {
+        lc_done(quiet, sprintf("Slide %d: Manim is off and scene %s has no render yet; showing a placeholder.", k, manim[[k]]$scene))
+        next
+      }
+      last <- lc_last_frame(found$file[nrow(found)], file.path(work, "png", sprintf("slide%03d-last.png", k)))
+      for (i in rows) {
+        segs$png[i] <- lc_overlay_png(segs$base[i], last, rect, file.path(work, "png", paste0(segs$id[i], "-in.png")))
+      }
+      lc_done(quiet, sprintf("Slide %d: Manim is off; scene %s shows its last rendered frame.", k, manim[[k]]$scene))
+      next
+    }
     secs <- lc_manim_render(manim_paths[[k]], manim[[k]], rect, cfg, cache)
-    runs <- lc_manim_runs(ifelse(is.na(segs$silent[rows]), segs$text[rows], ""), secs$name, k, deck)
+    runs <- lc_manim_runs(ifelse(is.na(segs$silent[rows]), segs$text[rows], ""), secs$name, k, deck,
+                          tags = segs$tags[rows])
     frames <- lapply(seq_len(nrow(secs)), function(j) {
       lc_frames(secs$file[j], file.path(work, "png", "manim"), sprintf("slide%03d-%03d", k, j), cfg$video$fps)
     })
@@ -1196,7 +1578,8 @@ Expected: FAIL: the boxed slide's video shows an empty slide and the messages ar
       mstill[i] <- top
       mine <- runs[runs$seg == r, , drop = FALSE]
       if (nrow(mine)) {
-        mevents[[i]] <- data.frame(label = secs$name[mine$from], pos = mine$pos, stringsAsFactors = FALSE)
+        mevents[[i]] <- data.frame(label = secs$name[mine$from], pos = mine$pos, tag = mine$tag, over = mine$over,
+                                   stringsAsFactors = FALSE)
         mcaptured[[i]] <- lapply(seq_len(nrow(mine)), function(j) {
           fr <- frames[mine$from[j]:mine$to[j]]
           list(label = secs$name[mine$from[j]], files = unlist(lapply(fr, function(x) x$files)), seconds = 1 / cfg$video$fps)
@@ -1212,7 +1595,35 @@ Expected: FAIL: the boxed slide's video shows an empty slide and the messages ar
   }
 ```
 
-(d) In the clip loop, make the Manim branch come first:
+(d) In the voice loop, a scene segment cued by tags is voiced in pieces like a tagged Plotly segment (R/build.R:114-121). Replace the `tagged <- ...` line and the `v <- if (tagged) {` branch head with:
+
+```r
+    mev <- mevents[[i]]
+    # Recorded narration is one file per segment, so its tags are placed by
+    # the timing estimate, as quotes are.
+    mtagged <- !is.null(mev) && any(mev$tag) && cfg$voice$provider != "recorded"
+    tagged <- !mtagged && !is.null(events[[i]]) && "over" %in% names(events[[i]]) && cfg$voice$provider != "recorded"
+    seg_id <- segs$id[i]
+    voice_piece <- function(txt, out) voice(list(text = txt, id = seg_id), out)
+    v <- if (mtagged) {
+      # In a tagged segment, only the opening run (first segment, sections
+      # before the first tag) is untagged, and it comes first. The tags
+      # wait for it.
+      tg <- which(mev$tag)
+      open <- setdiff(seq_len(nrow(mev)), tg)
+      busy <- sum(vapply(mcaptured[[i]][open], function(x) length(x$files) * x$seconds, 0)) / cfg$video$animation_speed
+      tv <- lc_voice_tagged(segs$pieces[[i]], mev[tg, , drop = FALSE], mcaptured[[i]][tg], voice_piece,
+                            cfg, file.path(work, "audio", seg_id), busy = busy)
+      at[i] <- list(c(rep(0, length(open)), tv$at))
+      tv
+    } else if (tagged) {
+      tv <- lc_voice_tagged(segs$pieces[[i]], events[[i]], captured[[i]], voice_piece,
+                            cfg, file.path(work, "audio", seg_id))
+```
+
+(the rest of the existing tagged branch, `at[i] <- list(tv$at); tv`, and the plain branch follow unchanged).
+
+(e) In the clip loop, make the Manim branch come first:
 
 ```r
     segs$clip_seconds[i] <- if (!is.na(mstill[i])) {
@@ -1223,16 +1634,42 @@ Expected: FAIL: the boxed slide's video shows an empty slide and the messages ar
       a_dur <- if (silent) max(0, segs$silent[i] - cfg$video$lead_in - cfg$video$tail) else segs$audio_seconds[i]
       ev <- mevents[[i]] %||% data.frame(label = character(0), pos = numeric(0))
       sched <- lc_animation_schedule(mstill[i], ev, mcaptured[[i]], if (silent) "" else segs$text[i],
-                                     timings[[i]], a_dur, mcfg)
+                                     timings[[i]], a_dur, mcfg, at = at[[i]])
+      if (!silent) {
+        for (note in lc_manim_timing_notes(sched, a_dur, cfg)) {
+          lc_say(quiet, sprintf("Note, slide %d (%s): %s.", segs$slide[i], segs$id[i], note))
+        }
+      }
       lc_manim_clip(sched, segs$base[i], manim_rect[[as.character(segs$slide[i])]], segs$clip[i], cfg,
                     audio = if (silent) NULL else segs$audio[i])
     } else if (!is.null(events[[i]])) {
 ```
 
-(the existing Plotly, voiced-still and silent-still branches follow unchanged), and after the existing `segs$png_out <- vapply(...)` line:
+(the existing Plotly, voiced-still and silent-still branches follow unchanged), and after the existing `segs$png_out <- vapply(...)` line (R/build.R:152-155):
 
 ```r
   segs$png_out[!is.na(mout)] <- mout[!is.na(mout)]
+```
+
+`lc_write_thumbnail()` reads `png_out` (R/chapters.R:59-70), so a scene slide's thumbnail shows the composited scene.
+
+(f) In `R/lint.R`, `lc_lint_slides()`: lint cannot see a scene's sections or their lengths, so scene slides skip the checks that depend on them. After `ch <- lc_visual_changes(...)`:
+
+```r
+    # Scene slides: tags name sections lint cannot see, and the motion is
+    # inside the scene. The build reports their timing instead.
+    scene <- "manim" %in% names(slides) && length(slides$manim[[i]]) > 0
+```
+
+and guard the "unknown tag", "static after animation" and "static slide" checks with `!scene`. Test in `tests/testthat/test-lint.R`:
+
+```r
+test_that("scene slides skip the stillness and tag checks", {
+  long <- paste(rep("This sentence explains the idea at some length for listeners.", 12), collapse = " ")
+  s <- fake_slides(paste(long, "[play: grow]"))
+  s$manim <- I(list(list(list(file = "a.py", scene = "A"))))
+  expect_false(any(c("static slide", "unknown tag") %in% lint_pacing(s)$issue))
+})
 ```
 
 - [ ] **Step 5: Run to see them pass**
@@ -1243,7 +1680,7 @@ Expected: PASS, including the existing integration test for fragments.
 - [ ] **Step 6: Commit** (with Logan's approval)
 
 ```bash
-git add R/build.R tests/testthat/helper.R tests/testthat/test-manim.R tests/testthat/test-manim-integration.R tests/testthat/fixtures/manim
+git add R/build.R R/manim.R R/lint.R tests/testthat/helper.R tests/testthat/test-manim.R tests/testthat/test-manim-integration.R tests/testthat/test-lint.R tests/testthat/fixtures/manim
 git commit -m "Phase 4c: Manim scenes in build_video, boxed or full frame"
 ```
 
@@ -1306,6 +1743,8 @@ voice:
   narrator: en-US-AndrewNeural
 video:
   resolution: 1080p
+  silent:
+    "1": 3
 ```
 
 - [ ] **Step 2: Write the scenes** (fix any API error Task 0, Step 7 recorded).
@@ -1483,16 +1922,38 @@ The rules:
 
 - Whatever the scene does before its first `next_section()` plays as the
   slide opens.
-- A section starts when the narration reaches the first quote of its name.
-  Case and trailing punctuation do not matter.
+- A section starts when the narration reaches the first quote of its name,
+  or when the section before it finishes, whichever is later. Case and
+  trailing punctuation do not matter.
 - A section that is never quoted plays straight after the one before it.
 - Quotes must follow the scene's order. Quoting a section again later, as a
   reminder, does nothing.
-- On a silent slide the whole scene plays, and the slide lasts as long as
-  the scene.
+- For exact timing, use a play tag instead of a quote, as for charts:
+  `[play: demand shifts right]` starts the section at that point and the
+  narration waits for it; `[play: demand shifts right, over]` lets the
+  narration carry on while it plays. The voice never reads the tag. A
+  stretch of notes with tags uses only its tags, and a tag that names no
+  section stops the build with the scene's section names.
+- On a silent slide the whole scene plays. The slide lasts as long as the
+  scene plus the usual short pause before and after, or as long as its
+  silent setting, whichever is longer.
 
 The build prints how many sections each slide cued. If that number is lower
 than you expect, check the spelling of the quotes.
+
+`lint_notes()` cannot see inside a scene, so it does not report scene slides
+as static. The build checks their timing instead, once the scene is rendered,
+and prints a note when the scene's picture stays still for more than 30
+seconds or the scene keeps moving more than a second after the narration
+ends.
+
+Slide numbers (`video: slide_number:`) are left off scene slides.
+
+To build without Manim, for example a quick draft, set `manim: false` under
+`video:` in `lecturecast.yml`. Each scene then shows the last frame of its
+most recent render, or a "not rendered yet" box if it has never been
+rendered. `video: animations: false` turns off chart animations only; the
+two settings are separate.
 
 ## Explainer videos
 
@@ -1570,9 +2031,13 @@ lecturecast::build_video(file.path(dir, "scenes.html"))
 - **Sections out of order** means the notes quote a later section before an
   earlier one.
 
-Renders are cached by everything that changes the pictures: the scene
-files, the data files, the size and the frame rate. Editing the notes or
-changing the voice does not render a scene again.
+Renders are cached by the `.py` files in the scene's own folder, a
+`manim.cfg` there if there is one, the files named in `inputs=`, the size,
+the frame rate and the background. Editing the
+notes or changing the voice does not render a scene again. A change anywhere
+else, such as a module in another folder or a data file not listed in
+`inputs=`, is not noticed: list the file in `inputs=`, or delete the cache
+folder to force a fresh render.
 ````
 
 - [ ] **Step 4: Check the package and the example**
@@ -1596,7 +2061,7 @@ git commit -m "Phase 4c: example scenes, data from R, Manim vignette"
 
 **Files:**
 - Modify: `project/plans/2026-10-13-lecturecast-plan.md` (Phases list: add "4c. Manim scenes" after 4b, one line linking this plan)
-- Modify: `project/plans/2026-10-13-ledger.md` (task log line for Phase 4c, rulings 1 to 8 above, Task 0 research)
+- Modify: `project/plans/2026-10-13-ledger.md` (task log line for Phase 4c, rulings 1 to 8 above and Logan's 2026-11-08 rulings, Task 0 research)
 
 - [ ] **Step 1: Whole-branch review.** A fresh reviewer reads this plan, the proposal, and `git diff main` for Phase 4c, and checks the Review Focus list against the tests.
 - [ ] **Step 2: Fix what the review finds,** each with its test.

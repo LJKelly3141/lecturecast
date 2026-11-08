@@ -593,7 +593,7 @@ test_that("a back-reference is ignored, but out-of-order cues stop the build", {
   r <- lc_manim_runs("\"b\" then \"c\", as after \"b\".", c("a", "b", "c"), 1)
   expect_equal(r$from, 1:3)
   expect_error(lc_manim_runs("\"c\" before \"b\".", c("a", "b", "c"), 5, "d.html"),
-               "Slide 5 quotes its scene's sections out of order")
+               "Slide 5 cues its scene's sections out of order")
 })
 
 test_that("silent segments (empty text) cue nothing", {
@@ -681,9 +681,9 @@ lc_manim_runs <- function(texts, names, slide, deck = NULL, tags = NULL) {
     }
   }
   if (is.unsorted(cued$sec, strictly = TRUE)) {
-    lc_abort("manim", sprintf("Slide %d quotes its scene's sections out of order (%s). They play in the order the scene defines them.",
+    lc_abort("manim", sprintf("Slide %d cues its scene's sections out of order (%s). They play in the order the scene defines them.",
                               slide, paste0("\"", names[cued$sec], "\"", collapse = ", ")), file = deck,
-             fix = "Reorder the quotes in the notes, or the next_section() calls in the scene.")
+             fix = "Reorder the cues in the notes, or the next_section() calls in the scene.")
   }
   from <- sort(unique(c(1L, cued$sec)))
   to <- c(from[-1] - 1L, length(names))

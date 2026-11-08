@@ -89,3 +89,19 @@ test_that("curly and straight apostrophes match", {
   expect_equal(ev$label, "Cook's distance")
   expect_equal(lc_label_key("“Tariff”"), lc_label_key("\"Tariff\""))
 })
+
+test_that("a tag waits for an animation already playing at the start", {
+  skip_if_no_ffmpeg()
+  dir <- withr::local_tempdir()
+  cfg <- lecturecast_config(config = write_config(c("voice:", "  provider: edge"), dir = dir))
+  piece <- function(txt, out) {
+    processx::run("ffmpeg", c("-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=duration=1", out))
+    list(file = out, timing = NULL, cached = TRUE)
+  }
+  ev <- data.frame(label = "grow", over = FALSE)
+  cap <- list(list(files = rep("f", 10), seconds = 0.1))
+  # Piece 1 ends at 1 s, but the opening runs 3 s: "grow" starts at 3 s.
+  tv <- lc_voice_tagged(c("one", "two"), ev, cap, piece, cfg, file.path(dir, "s"), busy = 3)
+  expect_equal(tv$at, 3, tolerance = 1e-6)
+  expect_equal(lc_duration(tv$file, "t"), 3 + 1 + 0.15 + 1, tolerance = 0.1)
+})

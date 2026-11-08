@@ -57,7 +57,7 @@ lc_tag_events <- function(tags, buttons, slide, title, deck) {
 # Returns the joined narration (a .wav), its timing, the time each
 # animation starts (seconds into the narration), and whether every piece
 # came from the cache.
-lc_voice_tagged <- function(pieces, events, captured, voice_piece, cfg, work_base) {
+lc_voice_tagged <- function(pieces, events, captured, voice_piece, cfg, work_base, busy = 0) {
   step <- "voice (tags)"
   v <- cfg$video
   n <- length(pieces)
@@ -77,11 +77,13 @@ lc_voice_tagged <- function(pieces, events, captured, voice_piece, cfg, work_bas
   }
   # Lay out: each piece follows the last; an animation starts as the piece
   # before its tag ends; a waiting tag holds the next piece until the
-  # animation is over. Animations never overlap.
+  # animation is over. Animations never overlap. `busy` is how long an
+  # untagged animation (a Manim scene's opening) plays from the start, so
+  # the first tag waits for it.
   piece_start <- numeric(n)
   at <- numeric(n - 1)
   t <- 0
-  anim_end <- 0
+  anim_end <- busy
   for (k in seq_len(n)) {
     piece_start[k] <- t
     t <- t + durs[k]

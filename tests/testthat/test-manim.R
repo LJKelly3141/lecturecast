@@ -92,3 +92,86 @@ test_that("fill frame covers the whole video without asking Chrome", {
   r <- lc_manim_rect(NULL, list(fill = "frame"), c(1280L, 720L), "d.html", 1)
   expect_equal(unname(r), c(0L, 0L, 1280L, 720L))
 })
+
+test_that("a scene with no cues plays whole from the start of the slide", {
+  r <- lc_manim_runs("No quotes here.", c("a", "b", "c"), 1)
+  expect_equal(r$seg, 1L)
+  expect_equal(r$pos, 0)
+  expect_equal(c(r$from, r$to), c(1L, 3L))
+  expect_false(r$cued)
+})
+
+test_that("each quoted section starts at its quote; the opening plays first", {
+  text <- "First the square. Now “grow” it. Then \"spin\" it."
+  r <- lc_manim_runs(text, c("autocreated", "grow", "spin"), 1)
+  expect_equal(r$from, 1:3)
+  expect_equal(r$to, 1:3)
+  expect_equal(r$pos, c(0, lc_nows("First the square. Now "), lc_nows("First the square. Now “grow” it. Then ")))
+  expect_equal(r$cued, c(FALSE, TRUE, TRUE))
+})
+
+test_that("unquoted sections play straight on after the one before", {
+  r <- lc_manim_runs("Then \"c\".", c("a", "b", "c", "d"), 1)
+  expect_equal(r$from, c(1L, 3L))
+  expect_equal(r$to, c(2L, 4L))
+})
+
+test_that("cues can come from later segments of the same slide", {
+  r <- lc_manim_runs(c("Here is \"b\".", "And then \"c\"."), c("a", "b", "c"), 1)
+  expect_equal(r$seg, c(1L, 1L, 2L))
+  expect_equal(r$from, 1:3)
+})
+
+test_that("a quoted first section has no separate opening", {
+  r <- lc_manim_runs("\"a\" then \"b\".", c("a", "b"), 1)
+  expect_equal(r$from, 1:2)
+  expect_equal(r$cued, c(TRUE, TRUE))
+})
+
+test_that("a back-reference is ignored, but out-of-order cues stop the build", {
+  r <- lc_manim_runs("\"b\" then \"c\", as after \"b\".", c("a", "b", "c"), 1)
+  expect_equal(r$from, 1:3)
+  expect_error(lc_manim_runs("\"c\" before \"b\".", c("a", "b", "c"), 5, "d.html"),
+               "Slide 5 cues its scene's sections out of order")
+})
+
+test_that("silent segments (empty text) cue nothing", {
+  r <- lc_manim_runs("", c("a", "b"), 1)
+  expect_equal(c(r$from, r$to), c(1L, 2L))
+})
+
+test_that("a mistyped cue cues nothing and its section plays straight on", {
+  r <- lc_manim_runs("Now \"grwo\" it. Then \"spin\" it.", c("opening", "grow", "spin"), 1)
+  expect_equal(sum(r$cued), 1)
+  expect_equal(r$from, c(1L, 3L))
+  expect_equal(r$to, c(2L, 3L))
+})
+
+tagged <- function(text) lc_parse_tags(text)
+
+test_that("play tags cue sections exactly, with over", {
+  p <- tagged("First the square. [play: grow] Now it grows. [play: Spin, over] And it turns.")
+  r <- lc_manim_runs(p$text, c("opening", "grow", "spin"), 1, tags = list(p$tags))
+  expect_equal(r$from, 1:3)
+  expect_equal(r$tag, c(FALSE, TRUE, TRUE))
+  expect_equal(r$over, c(FALSE, FALSE, TRUE))
+  expect_equal(r$pos[2:3], p$tags$pos)
+})
+
+test_that("a segment with tags ignores its quotes; one without uses them", {
+  a <- tagged("Here \"spin\" is only a word. [play: grow] Done.")
+  b <- tagged("Then \"spin\" it.")
+  r <- lc_manim_runs(c(a$text, b$text), c("opening", "grow", "spin"), 1, tags = list(a$tags, b$tags))
+  expect_equal(r$seg, c(1L, 1L, 2L))
+  expect_equal(r$tag, c(FALSE, TRUE, FALSE))
+  expect_equal(r$cued, c(FALSE, TRUE, TRUE))
+})
+
+test_that("an unknown tag or a section tagged twice stops the build", {
+  p <- tagged("[play: grwo] Now.")
+  expect_error(lc_manim_runs(p$text, c("opening", "grow"), 4, "d.html", tags = list(p$tags)),
+               "Slide 4 has \\[play: grwo\\], but scene has no section of that name")
+  q <- tagged("[play: grow] Now. [play: grow] Again.")
+  expect_error(lc_manim_runs(q$text, c("opening", "grow"), 4, "d.html", tags = list(q$tags)),
+               "plays section \"grow\" twice")
+})

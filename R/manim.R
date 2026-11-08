@@ -131,3 +131,52 @@ lc_manim_rect <- function(b, spec, wh, deck, slide) {
   v <- lc_js(b, js, "manim", deck)
   lc_manim_box(if (is.null(v)) NULL else jsonlite::fromJSON(v), wh, slide, deck)
 }
+
+# Which sections play when, for one slide. `texts` holds the narration of
+# the slide's segments in order ("" for silent ones), tags already removed.
+# A segment with [play: name] tags is cued by its tags only, exactly; one
+# without is cued by the first quote of each section's name. Sections
+# nobody cues play straight on after the one before; sections before the
+# first cue open the slide. Returns one row per run: its segment, cue
+# position, first and last section, and how it was cued.
+lc_manim_runs <- function(texts, names, slide, deck = NULL, tags = NULL) {
+  key <- lc_label_key(names)
+  cued <- data.frame(seg = integer(0), pos = numeric(0), sec = integer(0), tag = logical(0), over = logical(0))
+  for (s in seq_along(texts)) {
+    tg <- if (is.null(tags)) NULL else tags[[s]]
+    if (!is.null(tg) && nrow(tg)) {
+      for (k in seq_len(nrow(tg))) {
+        hit <- match(lc_label_key(tg$label[k]), key)
+        if (is.na(hit)) {
+          lc_abort("script", sprintf("Slide %d has [play: %s], but scene has no section of that name.", slide, tg$label[k]),
+                   file = deck, fix = paste0("Use one of the scene's sections: ", paste(sprintf("\"%s\"", names), collapse = ", "), "."))
+        }
+        if (hit %in% cued$sec) {
+          lc_abort("script", sprintf("Slide %d plays section \"%s\" twice; a section plays once.", slide, names[hit]), file = deck)
+        }
+        cued <- rbind(cued, data.frame(seg = s, pos = tg$pos[k], sec = hit, tag = TRUE, over = isTRUE(tg$over[k])))
+      }
+      next
+    }
+    q <- lc_quotes(texts[s])
+    for (k in seq_len(nrow(q))) {
+      hit <- match(lc_label_key(q$phrase[k]), key)
+      # A section already cued is a back-reference, not a second cue.
+      if (is.na(hit) || hit %in% cued$sec) next
+      cued <- rbind(cued, data.frame(seg = s, pos = q$pos[k], sec = hit, tag = FALSE, over = FALSE))
+    }
+  }
+  if (is.unsorted(cued$sec, strictly = TRUE)) {
+    lc_abort("manim", sprintf("Slide %d cues its scene's sections out of order (%s). They play in the order the scene defines them.",
+                              slide, paste0("\"", names[cued$sec], "\"", collapse = ", ")), file = deck,
+             fix = "Reorder the cues in the notes, or the next_section() calls in the scene.")
+  }
+  from <- sort(unique(c(1L, cued$sec)))
+  to <- c(from[-1] - 1L, length(names))
+  hit <- match(from, cued$sec)
+  data.frame(seg = ifelse(is.na(hit), 1L, cued$seg[hit]),
+             pos = ifelse(is.na(hit), 0, cued$pos[hit]),
+             from = from, to = to, cued = !is.na(hit),
+             tag = !is.na(hit) & cued$tag[hit] %in% TRUE,
+             over = !is.na(hit) & cued$over[hit] %in% TRUE)
+}

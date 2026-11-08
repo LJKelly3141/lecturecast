@@ -208,3 +208,10 @@ test_that("a deck's title-slide notes are linted", {
   expect_equal(out$slide, 1L)
   expect_equal(out$found, "hides")
 })
+
+test_that("scene slides skip the stillness and tag checks", {
+  long <- paste(rep("This sentence explains the idea at some length for listeners.", 12), collapse = " ")
+  s <- fake_slides(paste(long, "[play: grow]"))
+  s$manim <- I(list(list(list(file = "a.py", scene = "A"))))
+  expect_false(any(c("static slide", "unknown tag") %in% lint_pacing(s)$issue))
+})

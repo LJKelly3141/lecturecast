@@ -67,6 +67,24 @@ build_video <- function(deck, config = NULL, out_dir = NULL, work_dir = NULL,
   lc_say(quiet, sprintf("Script: %d slides, %d segments (%d voiced, %d silent).",
                         nrow(slides), nrow(segs), n_voiced, nrow(segs) - n_voiced))
 
+  # Manim scenes: read and check the div on every slide being built before
+  # voicing anything.
+  manim <- vector("list", nrow(slides))
+  manim_paths <- vector("list", nrow(slides))
+  both_on <- isTRUE(cfg$video$manim) && isTRUE(cfg$video$animations)
+  for (k in unique(segs$slide)) {
+    m <- lc_manim_spec(slides$manim[[k]], k, deck)
+    if (is.null(m)) next
+    manim[k] <- list(m)
+    manim_paths[k] <- list(lc_manim_paths(m, cfg))
+    if (both_on && nrow(slides$buttons[[k]]) > 0) {
+      lc_abort("manim", sprintf("Slide %d holds a Manim scene and a Plotly chart with buttons; a slide can animate one or the other.", k),
+               file = deck)
+    }
+  }
+  manim_rect <- list()
+  manim_found <- list()
+
   voice <- lc_prepare_voice(cfg, segs, name, cache)
 
   lc_prepare_capture(b, deck, cfg$video$slide_number)
@@ -79,7 +97,25 @@ build_video <- function(deck, config = NULL, out_dir = NULL, work_dir = NULL,
   played <- list()
   for (i in seq_len(nrow(segs))) {
     lc_goto(b, segs$h[i], segs$v[i], segs$fragment[i], deck)
+    # A scene slide is measured and prepared before its screenshot, and
+    # never reaches the Plotly code.
+    m <- manim[[segs$slide[i]]]
+    mkey <- as.character(segs$slide[i])
+    if (!is.null(m)) {
+      if (is.null(manim_rect[[mkey]])) {
+        manim_rect[[mkey]] <- lc_manim_rect(b, m, wh, deck, segs$slide[i])
+        if (!isTRUE(cfg$video$manim)) {
+          manim_found[mkey] <- list(lc_manim_lookup(manim_paths[[segs$slide[i]]], m, manim_rect[[mkey]], cfg, cache))
+        }
+      }
+      placeholder <- !isTRUE(cfg$video$manim) && is.null(manim_found[[mkey]])
+      lc_manim_shot_prep(b, manim_rect[[mkey]], if (placeholder) m$scene else NULL, deck)
+    }
     lc_screenshot(b, segs$png[i], wh[1], wh[2], deck)
+    if (!is.null(m)) {
+      lc_manim_shot_done(b, deck)
+      next
+    }
     if (!isTRUE(cfg$video$animations) || !is.na(segs$silent[i])) next
     key <- as.character(segs$slide[i])
     buttons <- slides$buttons[[segs$slide[i]]]
@@ -102,6 +138,62 @@ build_video <- function(deck, config = NULL, out_dir = NULL, work_dir = NULL,
   chrome_open <- FALSE
   lc_done(quiet, sprintf("Captured %d slide states at %dx%d.", nrow(segs), wh[1], wh[2]))
 
+  # Manim scenes render after Chrome closes and before voicing, because a
+  # tagged narration waits for the sections it cues. For each scene slide:
+  # render (or reuse), plan which sections play at which cue, split them
+  # into frames, and composite the first and last picture of each segment.
+  # With video: manim: false, show the cached render's last frame, or the
+  # placeholder drawn during capture.
+  segs$base <- segs$png
+  mevents <- vector("list", nrow(segs))
+  mcaptured <- vector("list", nrow(segs))
+  mstill <- rep(NA_character_, nrow(segs))
+  mout <- rep(NA_character_, nrow(segs))
+  for (key in names(manim_rect)) {
+    k <- as.integer(key)
+    rect <- manim_rect[[key]]
+    rows <- which(segs$slide == k)
+    if (!isTRUE(cfg$video$manim)) {
+      found <- manim_found[[key]]
+      if (is.null(found)) {
+        lc_done(quiet, sprintf("Slide %d: Manim is off and scene %s has no render yet; showing a placeholder.", k, manim[[k]]$scene))
+        next
+      }
+      last <- lc_last_frame(found$file[nrow(found)], file.path(work, "png", sprintf("slide%03d-last.png", k)))
+      for (i in rows) {
+        segs$png[i] <- lc_overlay_png(segs$base[i], last, rect, file.path(work, "png", paste0(segs$id[i], "-in.png")))
+      }
+      lc_done(quiet, sprintf("Slide %d: Manim is off; scene %s shows its last rendered frame.", k, manim[[k]]$scene))
+      next
+    }
+    secs <- lc_manim_render(manim_paths[[k]], manim[[k]], rect, cfg, cache)
+    runs <- lc_manim_runs(ifelse(is.na(segs$silent[rows]), segs$text[rows], ""), secs$name, k, deck,
+                          tags = segs$tags[rows])
+    frames <- lapply(seq_len(nrow(secs)), function(j) {
+      lc_frames(secs$file[j], file.path(work, "png", "manim"), sprintf("slide%03d-%03d", k, j), cfg$video$fps)
+    })
+    top <- frames[[1]]$files[1]
+    for (r in seq_along(rows)) {
+      i <- rows[r]
+      mstill[i] <- top
+      mine <- runs[runs$seg == r, , drop = FALSE]
+      if (nrow(mine)) {
+        mevents[[i]] <- data.frame(label = secs$name[mine$from], pos = mine$pos, tag = mine$tag, over = mine$over,
+                                   stringsAsFactors = FALSE)
+        mcaptured[[i]] <- lapply(seq_len(nrow(mine)), function(j) {
+          fr <- frames[mine$from[j]:mine$to[j]]
+          list(label = secs$name[mine$from[j]], files = unlist(lapply(fr, function(x) x$files)), seconds = 1 / cfg$video$fps)
+        })
+        last <- mcaptured[[i]][[nrow(mine)]]$files
+        top <- last[length(last)]
+      }
+      segs$png[i] <- lc_overlay_png(segs$base[i], mstill[i], rect, file.path(work, "png", paste0(segs$id[i], "-in.png")))
+      mout[i] <- lc_overlay_png(segs$base[i], top, rect, file.path(work, "png", paste0(segs$id[i], "-out.png")))
+    }
+    lc_done(quiet, sprintf("Slide %d: scene %s, %d sections, %d cued in the notes%s.", k, manim[[k]]$scene, nrow(secs),
+                           sum(runs$cued), if (isTRUE(attr(secs, "cached"))) " (render reused from the cache)" else ""))
+  }
+
   # Voice. Segments already voiced with the same text and settings come
   # from the cache and cost nothing.
   timings <- vector("list", nrow(segs))
@@ -111,11 +203,24 @@ build_video <- function(deck, config = NULL, out_dir = NULL, work_dir = NULL,
   for (i in which(is.na(segs$silent))) {
     # Recorded narration is one file per segment, so its tags are placed by
     # the timing estimate, as quotes are.
-    tagged <- !is.null(events[[i]]) && "over" %in% names(events[[i]]) && cfg$voice$provider != "recorded"
-    v <- if (tagged) {
-      seg_id <- segs$id[i]
-      tv <- lc_voice_tagged(segs$pieces[[i]], events[[i]], captured[[i]],
-                            function(txt, out) voice(list(text = txt, id = seg_id), out),
+    mev <- mevents[[i]]
+    mtagged <- !is.null(mev) && any(mev$tag) && cfg$voice$provider != "recorded"
+    tagged <- !mtagged && !is.null(events[[i]]) && "over" %in% names(events[[i]]) && cfg$voice$provider != "recorded"
+    seg_id <- segs$id[i]
+    voice_piece <- function(txt, out) voice(list(text = txt, id = seg_id), out)
+    v <- if (mtagged) {
+      # In a tagged scene segment, only the opening run (first segment,
+      # sections before the first tag) is untagged, and it comes first.
+      # The tags wait for it.
+      tg <- which(mev$tag)
+      open <- setdiff(seq_len(nrow(mev)), tg)
+      busy <- sum(vapply(mcaptured[[i]][open], function(x) length(x$files) * x$seconds, 0)) / cfg$video$animation_speed
+      tv <- lc_voice_tagged(segs$pieces[[i]], mev[tg, , drop = FALSE], mcaptured[[i]][tg], voice_piece,
+                            cfg, file.path(work, "audio", seg_id), busy = busy)
+      at[i] <- list(c(rep(0, length(open)), tv$at))
+      tv
+    } else if (tagged) {
+      tv <- lc_voice_tagged(segs$pieces[[i]], events[[i]], captured[[i]], voice_piece,
                             cfg, file.path(work, "audio", seg_id))
       at[i] <- list(tv$at)
       tv
@@ -138,7 +243,23 @@ build_video <- function(deck, config = NULL, out_dir = NULL, work_dir = NULL,
   segs$audio_seconds <- NA_real_
   for (i in seq_len(nrow(segs))) {
     if (is.na(segs$silent[i])) segs$audio_seconds[i] <- lc_duration(segs$audio[i], "assemble")
-    segs$clip_seconds[i] <- if (!is.null(events[[i]])) {
+    segs$clip_seconds[i] <- if (!is.na(mstill[i])) {
+      silent <- !is.na(segs$silent[i])
+      mcfg <- cfg
+      # A silent slide has no sentences to pace against.
+      if (silent) mcfg$video$animation_pace <- "deck"
+      a_dur <- if (silent) max(0, segs$silent[i] - cfg$video$lead_in - cfg$video$tail) else segs$audio_seconds[i]
+      ev <- mevents[[i]] %||% data.frame(label = character(0), pos = numeric(0))
+      sched <- lc_animation_schedule(mstill[i], ev, mcaptured[[i]], if (silent) "" else segs$text[i],
+                                     timings[[i]], a_dur, mcfg, at = at[[i]])
+      if (!silent) {
+        for (note in lc_manim_timing_notes(sched, a_dur, cfg)) {
+          lc_say(quiet, sprintf("Note, slide %d (%s): %s.", segs$slide[i], segs$id[i], note))
+        }
+      }
+      lc_manim_clip(sched, segs$base[i], manim_rect[[as.character(segs$slide[i])]], segs$clip[i], cfg,
+                    audio = if (silent) NULL else segs$audio[i])
+    } else if (!is.null(events[[i]])) {
       sched <- lc_animation_schedule(segs$png[i], events[[i]], captured[[i]], segs$text[i], timings[[i]],
                                      segs$audio_seconds[i], cfg, at = at[[i]])
       lc_animated_clip(sched, segs$audio[i], segs$clip[i], cfg)
@@ -153,6 +274,7 @@ build_video <- function(deck, config = NULL, out_dir = NULL, work_dir = NULL,
     cap <- captured[[i]]
     if (is.null(cap)) segs$png[i] else { last <- cap[[length(cap)]]$files; last[length(last)] }
   }, "")
+  segs$png_out[!is.na(mout)] <- mout[!is.na(mout)]
   timeline <- lc_timeline(segs, cards, cfg, work)
 
   # Join, caption, transcript, chapters. Written under temporary names, renamed once

@@ -209,7 +209,10 @@ lc_lint_slides <- function(slides, max_words = 30, max_still = 30, words_per_sec
     }
     raw <- paste0("\n", s$notes, "\n")
     ch <- lc_visual_changes(raw, buttons, s$n_fragments)
-    if (length(ch$unknown)) {
+    # Scene slides: tags name sections lint cannot see, and the motion is
+    # inside the scene. The build reports their timing instead.
+    scene <- "manim" %in% names(slides) && length(slides$manim[[i]]) > 0
+    if (!scene && length(ch$unknown)) {
       add(s, "unknown tag", paste(sprintf("[play: %s]", ch$unknown), collapse = " "), "",
           "No chart button on this slide has that label, so the build will stop. Use a label exactly as the button shows it.")
     }
@@ -220,14 +223,14 @@ lc_lint_slides <- function(slides, max_words = 30, max_still = 30, words_per_sec
     st <- lc_still_stretches(raw, ch$at)
     st$secs <- st$words / words_per_second
     st$after_button <- st$after > 0 & ch$kind[pmax(st$after, 1)] == "button"
-    for (k in which(st$after_button & st$secs > max_still)) {
+    for (k in which(!scene & st$after_button & st$secs > max_still)) {
       add(s, "static after animation", sprintf("about %d s unchanged", round(st$secs[k])), lc_sentences(st$start[k])[1],
           paste0("The narration walks through what the animation showed while the chart sits at its end. ",
                  "Give the chart a button for each step that jumps to that step's state, and put [play: label] where each step is discussed, ",
                  "so the whole plays first and then each step is shown again as it is explained."))
     }
     other <- st[!st$after_button, ]
-    if (nrow(other) && max(other$secs) > max_still) {
+    if (!scene && nrow(other) && max(other$secs) > max_still) {
       k <- which.max(other$secs)
       add(s, "static slide", sprintf("about %d s unchanged", round(other$secs[k])), lc_sentences(other$start[k])[1],
           paste0("Show, don't just tell. Reveal the points as they are spoken (fragments, with --- between their notes), ",

@@ -407,3 +407,37 @@ lc_manim_timing_notes <- function(schedule, a_dur, cfg, max_still = 30) {
   }
   notes
 }
+
+# Before a scene slide's screenshot: hide the slide number (no numbers on
+# scene slides), and with video: manim: false and no render, draw a
+# placeholder over the box. Chrome's viewport is the video size, so the box
+# in video pixels is also CSS pixels.
+lc_manim_shot_prep <- function(b, rect, placeholder, deck) {
+  ph <- if (is.null(placeholder)) "" else sprintf("
+    const p = document.createElement('div');
+    p.id = 'lc-manim-placeholder';
+    Object.assign(p.style, {position: 'fixed', left: '%dpx', top: '%dpx', width: '%dpx', height: '%dpx',
+      background: '#e8e8e8', color: '#555555', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      textAlign: 'center', font: '600 28px sans-serif', zIndex: '2147483647'});
+    p.textContent = 'Manim scene not rendered yet: ' + %s;
+    document.body.appendChild(p);", rect[["x"]], rect[["y"]], rect[["w"]], rect[["h"]],
+    jsonlite::toJSON(placeholder, auto_unbox = TRUE))
+  js <- sprintf("(() => {
+    document.querySelectorAll('.reveal .slide-number').forEach(e => e.style.visibility = 'hidden');
+    %s
+    return new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(true))));
+  })()", ph)
+  lc_js(b, js, "capture", deck)
+  invisible(TRUE)
+}
+
+# After the screenshot: put the slide number back and remove any placeholder.
+lc_manim_shot_done <- function(b, deck) {
+  lc_js(b, "(() => {
+    document.querySelectorAll('.reveal .slide-number').forEach(e => e.style.visibility = '');
+    const p = document.getElementById('lc-manim-placeholder');
+    if (p) p.remove();
+    return true;
+  })()", "capture", deck)
+  invisible(TRUE)
+}

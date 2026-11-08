@@ -44,6 +44,7 @@ lc_config_defaults <- function(raw) {
   voice <- raw$voice %||% list()
   video <- raw$video %||% list()
   podcast <- raw$podcast %||% list()
+  manim <- raw$manim %||% list()
   list(
     voice = list(
       provider = voice$provider,
@@ -65,6 +66,7 @@ lc_config_defaults <- function(raw) {
       card_color = video$card_color %||% "#222222",
       fragments = video$fragments %||% TRUE,
       animations = video$animations %||% TRUE,
+      manim = video$manim %||% TRUE,
       animation_pace = video$animation_pace %||% "deck",
       animation_speed = video$animation_speed %||% 1,
       crossfade = video$crossfade %||% 0.5,
@@ -84,6 +86,10 @@ lc_config_defaults <- function(raw) {
       continuity = isTRUE(podcast$continuity),
       dialogue_settings = podcast$dialogue_settings,
       out_dir = podcast$out_dir
+    ),
+    manim = list(
+      background = manim$background,
+      timeout = manim$timeout %||% 900
     )
   )
 }
@@ -127,7 +133,7 @@ lc_config_validate <- function(cfg, path) {
       lc_abort(step, paste0("video: ", k, ": must be a hex colour such as \"#ffffff\"."), file = path)
     }
   }
-  for (k in c("fragments", "animations")) {
+  for (k in c("fragments", "animations", "manim")) {
     if (!is.logical(cfg$video[[k]]) || length(cfg$video[[k]]) != 1 || is.na(cfg$video[[k]])) {
       lc_abort(step, paste0("video: ", k, ": must be true or false."), file = path)
     }
@@ -160,6 +166,14 @@ lc_config_validate <- function(cfg, path) {
   if (!cfg$video$resolution %in% names(lc_resolutions)) {
     lc_abort(step, paste0("video: resolution: must be one of ", paste(names(lc_resolutions), collapse = ", "), "."),
              file = path)
+  }
+  bg <- cfg$manim$background
+  if (!is.null(bg) && !(is.character(bg) && length(bg) == 1 && grepl("^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$", bg))) {
+    lc_abort(step, "manim: background: must be a hex colour such as \"#ffffff\".", file = path)
+  }
+  to <- cfg$manim$timeout
+  if (!is.numeric(to) || length(to) != 1 || is.na(to) || to <= 0) {
+    lc_abort(step, "manim: timeout: must be a number of seconds above 0.", file = path)
   }
   invisible(TRUE)
 }

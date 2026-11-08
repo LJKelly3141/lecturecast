@@ -1,8 +1,9 @@
 #' Check which tools and keys lecturecast can find
 #'
-#' Reports whether Quarto, Chrome, FFmpeg, ffprobe, the `edge-tts` command
-#' and the `ELEVENLABS_API_KEY`, `YT_CLIENT_ID` and `YT_CLIENT_SECRET`
-#' environment variables are available. Values are never printed, only
+#' Reports whether Quarto, Chrome, FFmpeg, ffprobe, the `edge-tts` command,
+#' Manim (on PATH or through uv), LaTeX and `dvisvgm` (for math text in
+#' Manim scenes), and the `ELEVENLABS_API_KEY`, `YT_CLIENT_ID` and
+#' `YT_CLIENT_SECRET` environment variables are available. Values are never printed, only
 #' whether they are set.
 #'
 #' @param quiet If `TRUE`, print nothing.
@@ -21,6 +22,9 @@ lecturecast_check <- function(quiet = FALSE) {
     lc_row("ffmpeg", lc_find_tool("ffmpeg"), "assembling video and audio"),
     lc_row("ffprobe", lc_find_tool("ffprobe"), "checking every output"),
     lc_row("edge-tts", edge, "voice provider: edge"),
+    lc_row("manim", lc_find_manim(), "Manim scenes"),
+    lc_row("latex", lc_find_tool("latex"), "math text in Manim scenes"),
+    lc_row("dvisvgm", lc_find_tool("dvisvgm"), "math text in Manim scenes"),
     data.frame(
       item = "ELEVENLABS_API_KEY",
       found = key_set,

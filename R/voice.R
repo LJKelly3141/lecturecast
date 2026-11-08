@@ -28,6 +28,7 @@ lc_edge_engine <- function() {
 
 lc_state <- new.env(parent = emptyenv())
 lc_state$edge_engine <- list()
+lc_state$manim_engine <- list()
 
 # Voice one piece of text to `out` (an .mp3 path). Returns
 # list(file, timing) where timing is NULL, a data frame of cues (text,

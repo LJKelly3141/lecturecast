@@ -82,3 +82,25 @@ test_that("slide numbers are off by default and take true, false or a reveal for
   expect_error(sn("  slide_number: page"), "slide_number")
   expect_error(sn("  slide_number: 3"), "slide_number")
 })
+
+test_that("manim settings have defaults and are checked", {
+  cfg <- lecturecast_config(config = write_config(c("voice:", "  provider: edge")))
+  expect_null(cfg$manim$background)
+  expect_equal(cfg$manim$timeout, 900)
+  ok <- lecturecast_config(config = write_config(c("voice:", "  provider: edge", "manim:", "  background: \"#ffffff\"", "  timeout: 60")))
+  expect_equal(ok$manim$background, "#ffffff")
+  expect_error(lecturecast_config(config = write_config(c("voice:", "  provider: edge", "manim:", "  background: white"))),
+               "manim: background: must be a hex colour")
+  expect_error(lecturecast_config(config = write_config(c("voice:", "  provider: edge", "manim:", "  timeout: 0"))),
+               "manim: timeout: must be a number of seconds")
+})
+
+test_that("Manim and Plotly animations switch off separately", {
+  cfg <- lecturecast_config(config = write_config(c("voice:", "  provider: edge")))
+  expect_true(cfg$video$manim)
+  off <- lecturecast_config(config = write_config(c("voice:", "  provider: edge", "video:", "  manim: false")))
+  expect_false(off$video$manim)
+  expect_true(off$video$animations)
+  expect_error(lecturecast_config(config = write_config(c("voice:", "  provider: edge", "video:", "  manim: maybe"))),
+               "video: manim: must be true or false")
+})

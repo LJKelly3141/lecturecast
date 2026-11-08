@@ -321,3 +321,95 @@ test_that("with Manim off and no Manim installed, the lookup finds nothing and d
   local_mocked_bindings(lc_find_tool = function(tool) "")
   expect_null(lc_manim_lookup(f$paths, f$spec, c(x = 0L, y = 0L, w = 320L, h = 180L), f$cfg, withr::local_tempdir()))
 })
+
+ff <- function(...) processx::run("ffmpeg", c("-y", "-loglevel", "error", ...))
+
+# RGB of one pixel of an image or the first frame of a video. A 2x2 crop
+# scaled to one pixel, because a 1x1 crop of yuv420 video has no chroma.
+pixel <- function(file, x, y) {
+  raw <- tempfile(fileext = ".rgb")
+  ff("-i", file, "-frames:v", "1", "-vf", sprintf("crop=2:2:%d:%d,scale=1:1,format=rgb24", x, y), "-f", "rawvideo", raw)
+  as.integer(readBin(raw, "raw", 3))
+}
+
+test_that("every frame of a section becomes a picture", {
+  skip_if_no_ffmpeg()
+  dir <- withr::local_tempdir()
+  v <- file.path(dir, "s.mp4")
+  ff("-f", "lavfi", "-i", "testsrc=s=160x90:r=10:d=1", "-pix_fmt", "yuv420p", v)
+  fr <- lc_frames(v, file.path(dir, "frames"), "s01-001", 10)
+  expect_length(fr$files, 10)
+  expect_equal(fr$seconds, 0.1)
+})
+
+test_that("frames left from an earlier, longer render are removed", {
+  skip_if_no_ffmpeg()
+  dir <- withr::local_tempdir()
+  v <- file.path(dir, "s.mp4")
+  ff("-f", "lavfi", "-i", "testsrc=s=160x90:r=10:d=1", "-pix_fmt", "yuv420p", v)
+  dir.create(file.path(dir, "frames"))
+  file.create(file.path(dir, "frames", sprintf("s01-001-%05d.png", 1:30)))
+  expect_length(lc_frames(v, file.path(dir, "frames"), "s01-001", 10)$files, 10)
+})
+
+test_that("a section cued while the one before is still playing waits for it", {
+  cfg <- lecturecast_config(config = write_config(c("voice:", "  provider: edge", "video:", "  lead_in: 0", "  fps: 10"),
+                                                  dir = withr::local_tempdir()))
+  ev <- data.frame(label = c("a", "b"), pos = c(0, 4))
+  cap <- list(list(files = sprintf("a%02d", 1:30), seconds = 0.1), list(files = "b01", seconds = 0.1))
+  s <- lc_animation_schedule("still", ev, cap, "aaaa bbbb", NULL, 2, cfg)
+  # "b" is cued at 1 s, but "a" runs 3 s, so "b" shows at 3 s.
+  expect_equal(sum(s$seconds[seq_len(which(s$files == "b01")[1] - 1)]), 3, tolerance = 1e-6)
+})
+
+test_that("the last frame of a section video becomes a picture", {
+  skip_if_no_ffmpeg()
+  dir <- withr::local_tempdir()
+  v <- file.path(dir, "s.mp4")
+  ff("-f", "lavfi", "-i", "color=c=red:s=160x90:r=10:d=0.5", "-f", "lavfi", "-i", "color=c=blue:s=160x90:r=10:d=0.5",
+     "-filter_complex", "[0:v][1:v]concat=n=2:v=1[v]", "-map", "[v]", "-pix_fmt", "yuv420p", v)
+  out <- lc_last_frame(v, file.path(dir, "last.png"))
+  expect_gt(pixel(out, 80, 45)[3], 180)
+})
+
+test_that("timing notes flag a long still picture and a scene that outruns the narration", {
+  cfg <- lecturecast_config(config = write_config(c("voice:", "  provider: edge", "video:", "  lead_in: 0.3", "  tail: 0.5"),
+                                                  dir = withr::local_tempdir()))
+  fine <- list(files = c("a", "b"), seconds = c(5, 5.8), total = 10.8)
+  expect_length(lc_manim_timing_notes(fine, 10, cfg), 0)
+  frozen <- list(files = c("a", "b"), seconds = c(2, 40.8), total = 42.8)
+  expect_match(lc_manim_timing_notes(frozen, 42, cfg), "still for about 41 s")
+  long <- list(files = c("a", "b"), seconds = c(1, 13.8), total = 14.8)
+  expect_match(lc_manim_timing_notes(long, 10, cfg), "runs about 4 s past the narration")
+})
+
+test_that("a still lays the scene frame over the slide at the box", {
+  skip_if_no_ffmpeg()
+  dir <- withr::local_tempdir()
+  base <- file.path(dir, "base.png"); top <- file.path(dir, "top.png")
+  ff("-f", "lavfi", "-i", "color=c=white:s=320x180", "-frames:v", "1", base)
+  ff("-f", "lavfi", "-i", "color=c=red:s=80x60", "-frames:v", "1", top)
+  out <- lc_overlay_png(base, top, c(x = 100L, y = 40L, w = 80L, h = 60L), file.path(dir, "out.png"))
+  inside <- pixel(out, 140, 70); outside <- pixel(out, 10, 10)
+  expect_gt(inside[1], 200); expect_lt(inside[2], 60)
+  expect_true(all(outside > 200))
+})
+
+test_that("a Manim clip has the scene in its box, the narration and the planned length", {
+  skip_if_no_ffmpeg()
+  dir <- withr::local_tempdir()
+  cfg <- lecturecast_config(config = write_config(c("voice:", "  provider: edge", "video:", "  resolution: 720p", "  lead_in: 0.3"), dir = dir))
+  base <- file.path(dir, "base.png"); top <- file.path(dir, "top.png"); audio <- file.path(dir, "a.mp3")
+  ff("-f", "lavfi", "-i", "color=c=white:s=1280x720", "-frames:v", "1", base)
+  ff("-f", "lavfi", "-i", "color=c=blue:s=400x200", "-frames:v", "1", top)
+  ff("-f", "lavfi", "-i", "sine=duration=1", audio)
+  sched <- list(files = top, seconds = 2, total = 2)
+  rect <- c(x = 100L, y = 100L, w = 400L, h = 200L)
+  d <- lc_manim_clip(sched, base, rect, file.path(dir, "clip.mp4"), cfg, audio = audio)
+  expect_equal(d, 2, tolerance = 0.1)
+  expect_equal(lc_dimensions(file.path(dir, "clip.mp4"), "t"), c(1280L, 720L))
+  expect_gt(pixel(file.path(dir, "clip.mp4"), 300, 200)[3], 180)
+  expect_true(all(pixel(file.path(dir, "clip.mp4"), 50, 50) > 200))
+  silent <- lc_manim_clip(sched, base, rect, file.path(dir, "silent.mp4"), cfg)
+  expect_equal(silent, 2, tolerance = 0.1)
+})

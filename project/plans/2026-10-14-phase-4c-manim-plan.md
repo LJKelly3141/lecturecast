@@ -1111,7 +1111,7 @@ ff <- function(...) processx::run("ffmpeg", c("-y", "-loglevel", "error", ...))
 # RGB of one pixel of an image or the first frame of a video.
 pixel <- function(file, x, y) {
   raw <- tempfile(fileext = ".rgb")
-  ff("-i", file, "-frames:v", "1", "-vf", sprintf("crop=1:1:%d:%d,format=rgb24", x, y), "-f", "rawvideo", raw)
+  ff("-i", file, "-frames:v", "1", "-vf", sprintf("crop=2:2:%d:%d,scale=1:1,format=rgb24", x, y), "-f", "rawvideo", raw)
   as.integer(readBin(raw, "raw", 3))
 }
 

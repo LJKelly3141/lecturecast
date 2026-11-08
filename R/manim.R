@@ -311,3 +311,99 @@ lc_manim_lookup <- function(paths, spec, rect, cfg, cache) {
   if (!file.exists(index)) return(NULL)
   lc_manim_cached(dir, index)
 }
+
+# Every frame of a section video as PNG files, each shown for 1 / fps.
+lc_frames <- function(video, dir, prefix, fps) {
+  step <- "manim"
+  lc_dir_create(dir)
+  # A reused work folder may hold frames from a longer render of this section.
+  pattern <- paste0("^", prefix, "-[0-9]{5}\\.png$")
+  unlink(list.files(dir, pattern = pattern, full.names = TRUE))
+  lc_run(lc_tool("ffmpeg", step),
+         c("-y", "-hide_banner", "-loglevel", "error", "-i", video, "-vf", sprintf("fps=%s", fps),
+           file.path(dir, paste0(prefix, "-%05d.png"))),
+         step = step, file = video, timeout = 600)
+  files <- sort(list.files(dir, pattern = pattern, full.names = TRUE))
+  if (length(files) == 0) lc_abort(step, "No frames could be read from the section video.", file = video)
+  list(files = files, seconds = 1 / fps)
+}
+
+# One scene frame laid over the slide capture at the box, as a PNG. These
+# are the pictures the fades between slides start from and end on.
+lc_overlay_png <- function(base, top, rect, out) {
+  step <- "manim"
+  lc_run(lc_tool("ffmpeg", step),
+         c("-y", "-hide_banner", "-loglevel", "error", "-i", base, "-i", top,
+           "-filter_complex", sprintf("[0:v][1:v]overlay=%d:%d", rect[["x"]], rect[["y"]]), "-frames:v", "1", out),
+         step = step, file = out, timeout = 60)
+  lc_dimensions(out, step)
+  out
+}
+
+# A clip of the slide capture with a schedule of scene frames laid over it
+# at the box. With audio the narration starts after the lead-in; without,
+# the clip is silent.
+lc_manim_clip <- function(schedule, base, rect, out, cfg, audio = NULL) {
+  step <- "assemble"
+  v <- cfg$video
+  wh <- lc_resolutions[[v$resolution]]
+  list_file <- paste0(out, ".txt")
+  on.exit(unlink(list_file), add = TRUE)
+  esc <- gsub("'", "'\\\\''", normalizePath(schedule$files))
+  body <- as.vector(rbind(paste0("file '", esc, "'"), sprintf("duration %.4f", schedule$seconds)))
+  # The concat demuxer needs the last picture listed again to honour its duration.
+  writeLines(c("ffconcat version 1.0", body, paste0("file '", esc[length(esc)], "'")), list_file)
+  if (is.null(audio)) {
+    audio_in <- c("-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo")
+    afilter <- "[2:a]anull[a]"
+  } else {
+    audio_in <- c("-i", audio)
+    afilter <- sprintf("[2:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,adelay=%d:all=1,apad[a]",
+                       round(v$lead_in * 1000))
+  }
+  graph <- paste(
+    sprintf("[0:v]scale=%d:%d:flags=lanczos,setsar=1,fps=%s[bg]", wh[1], wh[2], v$fps),
+    sprintf("[1:v]fps=%s,setsar=1[fg]", v$fps),
+    sprintf("[bg][fg]overlay=%d:%d:eof_action=repeat,format=yuv420p[v]", rect[["x"]], rect[["y"]]),
+    afilter, sep = ";")
+  args <- c("-y", "-hide_banner", "-loglevel", "error",
+            "-loop", "1", "-framerate", as.character(v$fps), "-i", base,
+            "-f", "concat", "-safe", "0", "-i", list_file,
+            audio_in,
+            "-filter_complex", graph, "-map", "[v]", "-map", "[a]",
+            "-t", sprintf("%.3f", schedule$total), lc_ffmpeg_video_args(v$fps), out)
+  lc_run(lc_tool("ffmpeg", step), args, step = step, file = out, timeout = 900)
+  got <- lc_duration(out, step)
+  if (abs(got - schedule$total) > 0.2) {
+    lc_abort(step, sprintf("Manim clip is %.2f s long, expected %.2f s.", got, schedule$total), file = out)
+  }
+  got
+}
+
+# The last frame of a section video, for a scene shown still when
+# video: manim: is false.
+lc_last_frame <- function(video, out) {
+  step <- "manim"
+  lc_run(lc_tool("ffmpeg", step),
+         c("-y", "-hide_banner", "-loglevel", "error", "-sseof", "-1", "-i", video, "-update", "1", out),
+         step = step, file = video, timeout = 60)
+  lc_dimensions(out, step)
+  out
+}
+
+# Notes on a voiced scene segment's timing, which lint cannot judge because
+# it never renders: a picture that stays still too long, or a scene that
+# keeps moving after the narration ends. Notes, not stops.
+lc_manim_timing_notes <- function(schedule, a_dur, cfg, max_still = 30) {
+  v <- cfg$video
+  notes <- character(0)
+  still <- max(schedule$seconds)
+  if (still > max_still) {
+    notes <- c(notes, sprintf("the picture stays still for about %d s; add a section or move a cue", round(still)))
+  }
+  over <- schedule$total - (v$lead_in + a_dur + v$tail)
+  if (over > 1) {
+    notes <- c(notes, sprintf("the scene runs about %d s past the narration; shorten it or say more", round(over)))
+  }
+  notes
+}

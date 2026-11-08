@@ -107,7 +107,13 @@ lc_read_slides <- function(b, deck) {
             (m.buttons || []).map((bt, bi) => ({
               plot: pi, menu: mi, button: bi, label: String(bt.label || ''),
               method: bt.method || 'restyle'
-            }))))
+            })))),
+        manim: Array.from(s.querySelectorAll('div.manim')).map(d => {
+          // Pandoc writes key=value attributes as data-key in HTML.
+          const a = n => d.getAttribute('data-' + n) || d.getAttribute(n) || '';
+          return {file: a('file'), scene: a('scene'), inputs: a('inputs'), fill: a('fill'),
+                  fragment: d.closest('.fragment') !== null};
+        })
       };
     }));
   })()"
@@ -125,6 +131,7 @@ lc_read_slides <- function(b, deck) {
     n_fragments = vapply(x, function(s) lc_fragment_steps(s$fragments), integer(1)),
     silent = vapply(x, function(s) if (is.null(s$silent)) NA_real_ else suppressWarnings(as.numeric(s$silent)), numeric(1)),
     buttons = I(lapply(x, function(s) lc_buttons_df(s$buttons))),
+    manim = I(lapply(x, function(s) s$manim %||% list())),
     stringsAsFactors = FALSE
   )
 }

@@ -90,6 +90,8 @@ Nothing in this task is committed except ledger notes. Every later task assumes 
 
 Already known (2026-11-08 spike and review): Step 1 is done (0.22.0). uvx ran it on this Mac on the first try (72 s, mostly the download); uvx and ffmpeg are in `/opt/homebrew/bin`, which is not on PATH in every shell. `--save_sections` writes `sections/<Scene>.json` with `name`, `type`, `video`, `width`, `height`, `nb_frames`, `duration`, `avg_frame_rate`, `codec_name`, `pix_fmt`, and files `<Scene>_000N_<slug>.mp4`. The 0.22.0 help confirms `--save_sections`, `--format`, `--disable_caching`, `--progress_bar`, `-r/--resolution W,H`, `--fps/--frame_rate`, `--media_dir`, and `-c/--config_file`. There is **no** `--background_color` option; the background goes through a config file (Task 4). Steps 2 to 9 still run, to record the rest.
 
+**Task 0 done 2026-11-08** (ledger, Research, "Phase 4c"). Plan changes it caused, with Logan's ruling on the first: (1) `--config_file` makes Manim ignore a `manim.cfg` beside the scene, so `manim: background:` plus a `manim.cfg` stops the build with a fix (Logan: stop, do not merge), checked in `lc_manim_paths()` before anything is voiced; (2) Manim reports a missing class on stdout, which `lc_run()` does not show, so `lc_manim_paths()` checks the class name first and lists the file's classes; (3) the demand example's lines are trimmed to the axes. Confirmed: the automatic first section is named "autocreated"; an empty one is left out of the index.
+
 **Files:**
 - Modify: `project/plans/2026-10-13-ledger.md` (Research section)
 - Scratch only: `work/manim-spike/` (gitignored)
@@ -351,7 +353,7 @@ test_that("bad manim divs stop the build", {
 test_that("scene paths are relative to the settings file, inputs to the scene", {
   dir <- withr::local_tempdir()
   dir.create(file.path(dir, "scenes", "data"), recursive = TRUE)
-  writeLines("", file.path(dir, "scenes", "a.py"))
+  writeLines(c("from manim import *", "", "class A(Scene):", "    pass"), file.path(dir, "scenes", "a.py"))
   writeLines("x", file.path(dir, "scenes", "data", "x.csv"))
   cfg <- list(path = file.path(dir, "lecturecast.yml"))
   p <- lc_manim_paths(lc_manim_spec(div(inputs = "data/x.csv"), 1, "d.html"), cfg)
@@ -359,6 +361,27 @@ test_that("scene paths are relative to the settings file, inputs to the scene", 
   expect_equal(unname(p$inputs), file.path(dir, "scenes", "data", "x.csv"))
   expect_error(lc_manim_paths(lc_manim_spec(div(file = "nope.py"), 1, "d.html"), cfg), "scene file does not exist")
   expect_error(lc_manim_paths(lc_manim_spec(div(inputs = "data/none.csv"), 1, "d.html"), cfg), "input file does not exist")
+})
+
+test_that("a scene name the file does not define stops, listing the classes", {
+  dir <- withr::local_tempdir()
+  dir.create(file.path(dir, "scenes"))
+  writeLines(c("class A(Scene):", "    pass", "class Helper:", "    pass"), file.path(dir, "scenes", "a.py"))
+  cfg <- list(path = file.path(dir, "lecturecast.yml"))
+  err <- expect_error(lc_manim_paths(lc_manim_spec(div(scene = "B"), 1, "d.html"), cfg), "no class named B")
+  expect_match(conditionMessage(err), "A, Helper", fixed = TRUE)
+})
+
+test_that("a background setting and a manim.cfg beside the scene stop the build", {
+  dir <- withr::local_tempdir()
+  dir.create(file.path(dir, "scenes"))
+  writeLines(c("class A(Scene):", "    pass"), file.path(dir, "scenes", "a.py"))
+  writeLines(c("[CLI]", "frame_rate = 15"), file.path(dir, "scenes", "manim.cfg"))
+  cfg <- list(path = file.path(dir, "lecturecast.yml"), manim = list(background = "#1e1e1e"))
+  err <- expect_error(lc_manim_paths(lc_manim_spec(div(), 1, "d.html"), cfg), "Manim would ignore the manim.cfg")
+  expect_match(conditionMessage(err), "background_color", fixed = TRUE)
+  cfg$manim$background <- NULL
+  expect_silent(lc_manim_paths(lc_manim_spec(div(), 1, "d.html"), cfg))
 })
 
 test_that("the box is rounded to even pixels and kept on screen", {
@@ -451,6 +474,22 @@ lc_manim_paths <- function(spec, cfg) {
       lc_abort(step, "An input file does not exist.", file = f,
                fix = "Paths in inputs= are relative to the scene file's folder. Render the deck first if R writes them.")
     }
+  }
+  # Manim's own message for a missing class goes to stdout, which lc_run
+  # does not show, so check the name here and list what the file has.
+  src <- readLines(scene, warn = FALSE)
+  classes <- sub("^\\s*class\\s+([A-Za-z_][A-Za-z0-9_]*).*$", "\\1", grep("^\\s*class\\s+[A-Za-z_]", src, value = TRUE))
+  if (!spec$scene %in% classes) {
+    lc_abort(step, sprintf("The scene file has no class named %s.", spec$scene), file = scene,
+             fix = if (length(classes)) paste0("scene= must name one of: ", paste(classes, collapse = ", "), ".")
+                   else "scene= must name a Scene class defined in the file.")
+  }
+  # Passing lecturecast's background config makes Manim ignore a manim.cfg
+  # beside the scene (Task 0), so the two cannot be used together.
+  if (!is.null(cfg$manim$background) && file.exists(file.path(dirname(scene), "manim.cfg"))) {
+    lc_abort(step, "lecturecast.yml sets manim: background:, and the scene's folder has a manim.cfg. Manim would ignore the manim.cfg.",
+             file = file.path(dirname(scene), "manim.cfg"),
+             fix = "Remove manim: background: from lecturecast.yml and put background_color = <colour> under [CLI] in manim.cfg.")
   }
   list(scene = normalizePath(scene), inputs = unname(inputs))
 }
@@ -1770,8 +1809,10 @@ class DemandShift(Scene):
         labels = ax.get_axis_labels(Text("Quantity", font_size=24), Text("Price", font_size=24))
 
         def line(name, color):
+            # Keep the line inside the axes: x where 0 <= a + b * x <= 10.
             a, b = c[name]
-            return ax.plot(lambda x: a + b * x, x_range=[0, 10], color=color)
+            ends = sorted([(0 - a) / b, (10 - a) / b])
+            return ax.plot(lambda x: a + b * x, x_range=[max(0, ends[0]), min(10, ends[1])], color=color)
 
         def equilibrium(name):
             (a1, b1), (a2, b2) = c["supply"], c[name]
@@ -1976,6 +2017,10 @@ manim:
   background: "#1e1e1e"
 ```
 
+If a scene's folder has its own `manim.cfg`, set the background there
+instead (`background_color = #1e1e1e` under `[CLI]`). The build stops if
+both are set, because Manim would then ignore the `manim.cfg`.
+
 ## Data from R
 
 A scene can read data that an R chunk in the deck writes. The numbers then
@@ -2030,6 +2075,8 @@ lecturecast::build_video(file.path(dir, "scenes.html"))
   width and a height, or use `fill="frame"`.
 - **Sections out of order** means the notes quote a later section before an
   earlier one.
+- **No class named** means `scene=` does not match a class in the file. The
+  message lists the classes the file has.
 
 Renders are cached by the `.py` files in the scene's own folder, a
 `manim.cfg` there if there is one, the files named in `inputs=`, the size,

@@ -117,6 +117,10 @@ build_podcast <- function(script, config = NULL, out_dir = NULL, cache_dir = NUL
   cache <- lc_cache_dir(cache_dir)
   work <- lc_dir_create(tempfile(paste0("lecturecast-", name, "-")))
   on.exit(unlink(work, recursive = TRUE), add = TRUE)
+  if (cfg$voice$provider == "kokoro") {
+    old_opt <- options(lecturecast.kokoro_quiet = quiet)
+    on.exit({ lc_kokoro_stop(); options(old_opt) }, add = TRUE)
+  }
   lc_say(quiet, sprintf("Script: %d turns, %d characters. Voice: %s.", nrow(turns),
                         sum(nchar(turns$text)), cfg$voice$provider))
 
@@ -162,6 +166,7 @@ lc_podcast_mode <- function(cfg) {
 lc_podcast_lines <- function(turns, cfg, cache, work, quiet) {
   ids <- c(host_a = lc_voice_id(cfg, "host_a"), host_b = lc_voice_id(cfg, "host_b"))
   if (cfg$voice$provider == "edge") lc_edge_command()
+  if (cfg$voice$provider == "kokoro") lc_kokoro_command()
   if (cfg$voice$provider == "elevenlabs") lc_elevenlabs_key("voice (elevenlabs)")
   keep_cues <- cfg$voice$provider == "elevenlabs" && identical(cfg$voice$model, "eleven_v3")
   files <- character(nrow(turns))

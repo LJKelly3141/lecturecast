@@ -138,4 +138,4 @@ list `lint_notes()` checks.
   documentation: <https://elevenlabs.io/docs/overview/capabilities/text-to-speech/best-practices>
 - "The art of writing great voice over scripts", The eLearning Coach: <https://theelearningcoach.com/elearning_design/the-art-of-writing-great-voice-over-scripts/>
 - "How to write for the human ear", The MX Group:
-  <https://themxgroup.com/resources/how-to-write-for-human-ear>
+  <https://www.themxgroup.com/resources/how-to-write-for-human-ear/>

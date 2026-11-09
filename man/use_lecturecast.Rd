@@ -6,8 +6,8 @@
 \usage{
 use_lecturecast(
   proj = ".",
-  provider = "edge",
-  narrator = "en-US-AndrewNeural",
+  provider = "kokoro",
+  narrator = NULL,
   out_dir = "build/video",
   quiet = FALSE
 )
@@ -15,11 +15,12 @@ use_lecturecast(
 \arguments{
 \item{proj}{The project folder. Defaults to the working directory.}
 
-\item{provider}{The voice provider: \code{"edge"}, \code{"elevenlabs"} or
-\code{"recorded"}.}
+\item{provider}{The voice provider: \code{"kokoro"} (the default, a free voice
+that runs on this computer), \code{"edge"}, \code{"elevenlabs"} or \code{"recorded"}.}
 
-\item{narrator}{The voice id for lecture videos. The default is an Edge
-voice; for ElevenLabs use a voice id from the ElevenLabs voice list.}
+\item{narrator}{The voice id for lecture videos. The default follows the
+provider: \code{am_michael} for Kokoro, \code{en-US-AndrewNeural} for Edge. For
+ElevenLabs use a voice id from the ElevenLabs voice list.}
 
 \item{out_dir}{Folder for finished videos, relative to the project.}
 

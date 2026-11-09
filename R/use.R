@@ -6,17 +6,21 @@
 #' settings file is never overwritten.
 #'
 #' @param proj The project folder. Defaults to the working directory.
-#' @param provider The voice provider: `"edge"`, `"elevenlabs"` or
-#'   `"recorded"`.
-#' @param narrator The voice id for lecture videos. The default is an Edge
-#'   voice; for ElevenLabs use a voice id from the ElevenLabs voice list.
+#' @param provider The voice provider: `"kokoro"` (the default, a free voice
+#'   that runs on this computer), `"edge"`, `"elevenlabs"` or `"recorded"`.
+#' @param narrator The voice id for lecture videos. The default follows the
+#'   provider: `am_michael` for Kokoro, `en-US-AndrewNeural` for Edge. For
+#'   ElevenLabs use a voice id from the ElevenLabs voice list.
 #' @param out_dir Folder for finished videos, relative to the project.
 #' @param quiet If `TRUE`, print nothing.
 #' @return Invisibly, the path of the settings file.
 #' @export
-use_lecturecast <- function(proj = ".", provider = "edge", narrator = "en-US-AndrewNeural",
+use_lecturecast <- function(proj = ".", provider = "kokoro", narrator = NULL,
                             out_dir = "build/video", quiet = FALSE) {
   step <- "settings"
+  if (is.null(narrator) && is.character(provider) && length(provider) == 1) {
+    narrator <- if (identical(provider, "kokoro")) "am_michael" else "en-US-AndrewNeural"
+  }
   if (!is.character(proj) || length(proj) != 1 || !dir.exists(proj)) {
     lc_abort(step, "Project folder not found.", file = as.character(proj)[1])
   }

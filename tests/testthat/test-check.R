@@ -8,7 +8,7 @@ test_that("check reports every item without external tools", {
   expect_s3_class(out, "data.frame")
   expect_equal(
     out$item,
-    c("quarto", "chrome", "ffmpeg", "ffprobe", "edge-tts", "manim", "latex", "dvisvgm", "ELEVENLABS_API_KEY",
+    c("quarto", "chrome", "ffmpeg", "ffprobe", "edge-tts", "kokoro", "manim", "latex", "dvisvgm", "ELEVENLABS_API_KEY",
       "YT_CLIENT_ID, YT_CLIENT_SECRET")
   )
   expect_false(any(out$found))
@@ -24,6 +24,7 @@ test_that("check finds tools that are present", {
   expect_true(all(out$found))
   expect_equal(out$detail[out$item == "edge-tts"], "/fake/bin/edge-tts")
   expect_equal(out$detail[out$item == "manim"], "/fake/bin/manim")
+  expect_match(out$detail[out$item == "kokoro"], "^/fake/bin/uv run .*kokoro==")
 })
 
 test_that("the API key value is never shown", {

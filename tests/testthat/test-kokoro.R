@@ -89,3 +89,79 @@ test_that("a mistyped voice stops with its id", {
   withr::defer(lc_kokoro_stop())
   expect_error(lc_voice_kokoro("Hi.", "af_hart", kokoro_cfg(), tempfile(fileext = ".mp3")), "af_hart")
 })
+
+# Task 2: Kokoro as a provider.
+test_that("Kokoro settings load, and bad ids and speeds stop", {
+  ok <- lecturecast_config(config = write_config(c("voice:", "  provider: kokoro", "  narrator: am_michael")))
+  expect_equal(ok$voice$provider, "kokoro")
+  expect_equal(ok$voice$kokoro_speed, 1)
+  expect_error(lecturecast_config(config = write_config(c("voice:", "  provider: kokoro", "  narrator: en-US-AndrewNeural"))),
+               "Kokoro voice ids look like af_heart or am_michael")
+  expect_error(lecturecast_config(config = write_config(c("voice:", "  provider: kokoro", "  host_a: zf_xiaobei"))),
+               "Kokoro voice ids look like")
+  expect_error(lecturecast_config(config = write_config(c("voice:", "  provider: kokoro", "  kokoro_speed: 3"))),
+               "must be a number from 0.5 to 2")
+})
+
+test_that("the cache key changes with Kokoro's speed and version", {
+  cfg <- function(extra = character()) {
+    lecturecast_config(config = write_config(c("voice:", "  provider: kokoro", "  narrator: am_michael", extra)))
+  }
+  k <- lc_cache_key(cfg(), "am_michael", "Hi.")
+  expect_false(k == lc_cache_key(cfg("  kokoro_speed: 1.1"), "am_michael", "Hi."))
+  local_mocked_bindings(lc_kokoro_engine = function() "kokoro 9.9.9")
+  expect_false(k == lc_cache_key(cfg(), "am_michael", "Hi."))
+})
+
+test_that("a podcast voiced by Kokoro stops Kokoro at the end, also on failure", {
+  skip_if_no_ffmpeg()
+  dir <- withr::local_tempdir()
+  stops <- 0
+  fail <- FALSE
+  local_mocked_bindings(
+    lc_kokoro_command = function() "/fake/uv",
+    lc_kokoro_stop = function() stops <<- stops + 1,
+    lc_voice_kokoro = function(text, voice_id, cfg, out) {
+      if (fail) lc_abort("voice (kokoro)", "Kokoro stopped.")
+      sine_wav(out, 0.5)
+      list(file = out, timing = data.frame(text = "One", start = 0, end = 0.4))
+    }
+  )
+  f <- file.path(dir, "episode.txt")
+  writeLines(c("HOST_A: One?", "HOST_B: Two."), f)
+  conf <- write_config(c("voice:", "  provider: kokoro", "  host_a: am_michael", "  host_b: af_heart"), dir = dir)
+  r <- build_podcast(f, config = conf, out_dir = file.path(dir, "out"), cache_dir = file.path(dir, "cache"), quiet = TRUE)
+  expect_true(file.exists(r$audio))
+  expect_equal(stops, 1)
+  fail <- TRUE
+  writeLines(c("HOST_A: Three?", "HOST_B: Four."), f)
+  expect_error(build_podcast(f, config = conf, out_dir = file.path(dir, "out"), cache_dir = file.path(dir, "cache"),
+                             quiet = TRUE), "Kokoro stopped")
+  expect_equal(stops, 2)
+})
+
+test_that("a deck voiced by Kokoro builds, with captions, and stops Kokoro once", {
+  skip_on_cran()
+  skip_on_ci()
+  skip_if_no_ffmpeg()
+  skip_if(!nzchar(Sys.which("quarto")), "Quarto not installed")
+  skip_if(!nzchar(lc_find_chrome()), "Chrome not found")
+  dir <- withr::local_tempdir()
+  file.copy(test_path("fixtures", "fragments.qmd"), dir)
+  processx::run("quarto", c("render", "fragments.qmd"), wd = dir)
+  stops <- 0
+  local_mocked_bindings(
+    lc_kokoro_command = function() "/fake/uv",
+    lc_kokoro_stop = function() stops <<- stops + 1,
+    lc_voice_kokoro = function(text, voice_id, cfg, out) {
+      sine_wav(out, 1)
+      list(file = out, timing = data.frame(text = strsplit(text, " ")[[1]][1], start = 0, end = 0.5))
+    }
+  )
+  conf <- write_config(c("voice:", "  provider: kokoro", "  narrator: am_michael",
+                         "video:", "  resolution: 720p", "  silent:", "    \"1\": 1"), dir = dir)
+  r <- build_video(file.path(dir, "fragments.html"), config = conf, out_dir = file.path(dir, "out"),
+                   cache_dir = file.path(dir, "cache"), quiet = TRUE)
+  expect_true(all(file.exists(c(r$video, r$captions))))
+  expect_equal(stops, 1)
+})

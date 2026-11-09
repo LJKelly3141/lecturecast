@@ -37,6 +37,7 @@ lc_state$kokoro <- NULL
 lc_voice <- function(text, voice_id, cfg, out, model = NULL) {
   switch(cfg$voice$provider,
     edge = lc_voice_edge(text, voice_id, cfg, out),
+    kokoro = lc_voice_kokoro(text, voice_id, cfg, out),
     elevenlabs = lc_voice_elevenlabs(text, voice_id, cfg, out, model = model),
     lc_abort("voice", paste0("Provider ", cfg$voice$provider, " cannot voice text."))
   )

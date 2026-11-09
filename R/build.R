@@ -39,6 +39,10 @@ build_video <- function(deck, config = NULL, out_dir = NULL, work_dir = NULL,
   name <- tools::file_path_sans_ext(basename(deck))
   wh <- lc_resolutions[[cfg$video$resolution]]
   lc_say(quiet, "Settings: ", cfg$path, " (voice: ", cfg$voice$provider, ")")
+  if (cfg$voice$provider == "kokoro") {
+    old_opt <- options(lecturecast.kokoro_quiet = quiet)
+    on.exit({ lc_kokoro_stop(); options(old_opt) }, add = TRUE)
+  }
 
   keep_work <- !is.null(work_dir)
   work <- lc_dir_create(work_dir %||% tempfile(paste0("lecturecast-", name, "-")))
@@ -367,8 +371,8 @@ lc_cache_key <- function(cfg, voice_id, text, model = NULL) {
     provider = cfg$voice$provider, voice = voice_id,
     model = if (cfg$voice$provider == "elevenlabs") model %||% cfg$voice$model else NULL,
     settings = if (cfg$voice$provider == "elevenlabs") cfg$voice$settings else NULL,
-    rate = if (cfg$voice$provider == "edge") cfg$voice$edge_rate else NULL,
-    engine = if (cfg$voice$provider == "edge") lc_edge_engine() else NULL,
+    rate = switch(cfg$voice$provider, edge = cfg$voice$edge_rate, kokoro = cfg$voice$kokoro_speed),
+    engine = switch(cfg$voice$provider, edge = lc_edge_engine(), kokoro = lc_kokoro_engine()),
     text = enc2utf8(text)
   )
   cli::hash_sha256(as.character(jsonlite::toJSON(parts, auto_unbox = TRUE, null = "null")))
@@ -445,6 +449,7 @@ lc_prepare_voice <- function(cfg, segs, name, cache) {
   }
   voice_id <- lc_voice_id(cfg, "narrator")
   if (cfg$voice$provider == "edge") lc_edge_command()
+  if (cfg$voice$provider == "kokoro") lc_kokoro_command()
   function(seg, out) {
     lc_cached_voice(lc_cache_key(cfg, voice_id, seg$text), cache,
                     function(f) lc_voice(seg$text, voice_id, cfg, f), out)

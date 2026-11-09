@@ -70,7 +70,7 @@ lc_kokoro_start <- function(timeout = 900, quiet = FALSE) {
 }
 
 # The running Kokoro process, started if there is none or it has died.
-lc_kokoro_get <- function(quiet = FALSE) {
+lc_kokoro_get <- function(quiet = getOption("lecturecast.kokoro_quiet", FALSE)) {
   p <- lc_state$kokoro
   if (is.null(p) || !p$is_alive()) {
     p <- lc_kokoro_start(quiet = quiet)

@@ -5,10 +5,16 @@ test_that("a starter settings file is written at the project root and is valid",
   path <- use_lecturecast(proj, quiet = TRUE)
   expect_equal(basename(path), "lecturecast.yml")
   cfg <- lecturecast_config(config = path)
-  expect_equal(cfg$voice$provider, "edge")
-  expect_equal(cfg$voice$narrator, "en-US-AndrewNeural")
+  expect_equal(cfg$voice$provider, "kokoro")
+  expect_equal(cfg$voice$narrator, "am_michael")
   expect_equal(cfg$video$out_dir, "build/video")
   expect_false(file.exists(paste0(path, ".partial")))
+})
+
+test_that("the narrator default follows the provider", {
+  proj <- withr::local_tempdir()
+  path <- use_lecturecast(proj, provider = "edge", quiet = TRUE)
+  expect_equal(lecturecast_config(config = path)$voice$narrator, "en-US-AndrewNeural")
 })
 
 test_that("an existing settings file is never overwritten", {

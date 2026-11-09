@@ -55,7 +55,8 @@ lc_config_defaults <- function(raw) {
       dialogue_model = voice$dialogue_model %||% "eleven_v3",
       settings = voice$settings,
       recorded_dir = voice$recorded_dir,
-      edge_rate = voice$edge_rate
+      edge_rate = voice$edge_rate,
+      kokoro_speed = voice$kokoro_speed %||% 1
     ),
     video = list(
       resolution = video$resolution %||% "1080p",
@@ -112,7 +113,7 @@ lc_card_setting <- function(x) {
 
 lc_config_validate <- function(cfg, path) {
   step <- "settings"
-  providers <- c("elevenlabs", "edge", "recorded")
+  providers <- c("kokoro", "edge", "elevenlabs", "recorded")
   p <- cfg$voice$provider
   if (is.null(p) || !p %in% providers) {
     lc_abort(step, paste0("voice: provider: must be one of ", paste(providers, collapse = ", "), "."),
@@ -121,6 +122,20 @@ lc_config_validate <- function(cfg, path) {
   if (p == "recorded" && is.null(cfg$voice$recorded_dir)) {
     lc_abort(step, "provider is recorded but voice: recorded_dir: is not set.", file = path,
              fix = "Set voice: recorded_dir: to the folder holding your audio files.")
+  }
+  if (p == "kokoro") {
+    sp <- cfg$voice$kokoro_speed
+    if (!is.numeric(sp) || length(sp) != 1 || is.na(sp) || sp < 0.5 || sp > 2) {
+      lc_abort(step, "voice: kokoro_speed: must be a number from 0.5 to 2 (1 = normal).", file = path)
+    }
+    for (role in c("narrator", "host_a", "host_b")) {
+      id <- cfg$voice[[role]]
+      if (!is.null(id) && !(is.character(id) && length(id) == 1 && grepl("^[ab][fm]_[a-z]+$", id))) {
+        lc_abort(step, paste0("voice: ", role, ": ", as.character(id)[1], " is not a Kokoro voice. ",
+                              "Kokoro voice ids look like af_heart or am_michael."), file = path,
+                 fix = "Use an English Kokoro voice: af_ or am_ (American), bf_ or bm_ (British).")
+      }
+    }
   }
   for (k in c("crossfade", "lead_in", "tail", "card_seconds", "fps")) {
     val <- cfg$video[[k]]

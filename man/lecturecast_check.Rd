@@ -15,6 +15,7 @@ Invisibly, a data frame with columns \code{item}, \code{found}, \code{detail} an
 }
 \description{
 Reports whether Quarto, Chrome, FFmpeg, ffprobe, the \code{edge-tts} command,
+Kokoro (run through uv),
 Manim (on PATH or through uv), LaTeX and \code{dvisvgm} (for math text in
 Manim scenes), and the \code{ELEVENLABS_API_KEY}, \code{YT_CLIENT_ID} and
 \code{YT_CLIENT_SECRET} environment variables are available. Values are never printed, only

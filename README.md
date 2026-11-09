@@ -9,7 +9,7 @@ Each slide's speaker notes are its script. lecturecast voices them, captures the
 - **Lecture videos.** `<deck>.mp4`, captions (`<deck>.vtt`) and a transcript (`<deck>-transcript.md`). Fragments appear when the narration reaches them. A play tag in the notes, such as `[play: AD falls]`, plays that chart button at exactly that point; the voice never reads it, and the narration waits for the animation to finish. Optional title and end cards.
 - **Podcasts.** `<episode>.mp3` with embedded chapters, a transcript and a chapter list, from a plain-text two-host script.
 
-The voice is a setting: Microsoft Edge voices (free, no account), ElevenLabs (stock or cloned voices, with an ElevenLabs account), or your own recordings. If the chosen voice fails, the build stops; it never switches to another voice.
+The voice is a setting: Kokoro (free, runs on your computer, no account), Microsoft Edge voices (free, no account, needs the internet), ElevenLabs (stock or cloned voices, with an ElevenLabs account), or your own recordings. If the chosen voice fails, the build stops; it never switches to another voice.
 
 Each voiced segment is cached. After editing one slide's notes, a rebuild voices only that slide.
 
@@ -26,7 +26,7 @@ lecturecast also needs these tools:
 - [Quarto](https://quarto.org), to render the decks (lecturecast never renders them itself).
 - Google Chrome, for capturing slides.
 - [FFmpeg](https://ffmpeg.org), including `ffprobe`.
-- For Edge voices, [uv](https://docs.astral.sh/uv/). lecturecast runs the `edge-tts` voice tool through `uvx` at a pinned version, so nothing else needs installing.
+- For Kokoro or Edge voices, [uv](https://docs.astral.sh/uv/). lecturecast runs both through uv at pinned versions, so nothing else needs installing. The first Kokoro build downloads the voice model; later builds reuse it.
 - For ElevenLabs, an API key in the `ELEVENLABS_API_KEY` environment variable. The key is never read from a settings file.
 
 Check what is found:
@@ -44,7 +44,7 @@ library(lecturecast)
 use_lecturecast()
 ```
 
-This writes `lecturecast.yml` with an Edge voice (en-US-AndrewNeural) and sends videos to `build/video/`, outside the rendered site. Keep `build/` in `.gitignore`. An existing settings file is never overwritten.
+This writes `lecturecast.yml` with a Kokoro voice (am_michael) and sends videos to `build/video/`, outside the rendered site. Keep `build/` in `.gitignore`. An existing settings file is never overwritten.
 
 Render the deck with Quarto, then build:
 

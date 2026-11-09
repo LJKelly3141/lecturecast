@@ -60,7 +60,7 @@ this skill is where drafting happens, and the instructor decides.
 ## Steps
 
 0. **Settings.** If the project has no `lecturecast.yml`, offer
-   `lecturecast::use_lecturecast()`: Edge voice en-US-AndrewNeural, videos
+   `lecturecast::use_lecturecast()`: Kokoro voice am_michael, videos
    to `build/video/`. It never overwrites an existing file.
 1. **Read the script.** `lecturecast::lecture_script("<deck>.qmd")` shows
    every word as it will be voiced.

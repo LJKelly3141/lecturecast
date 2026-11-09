@@ -4,7 +4,7 @@
 
 **Why not video_explainer:** Tried on 2026-10-13 (log in `coursepack/project/plans/2026-10-13-explainer-video-facility.md`). The video looked good, but it hard-coded a retired model in 10 files, crashed between steps, reported a broken scene as a success, and hung silently unpacking its browser. It runs hidden Claude sessions with permissions skipped, and it has no licence. lecturecast is written from scratch and copies none of its code.
 
-**Tech Stack:** R package (MIT). External tools: Quarto, Chrome, FFmpeg. Voice services by setting: ElevenLabs API, Microsoft Edge voices, or recorded audio.
+**Tech Stack:** R package (MIT). External tools: Quarto, Chrome, FFmpeg. Voice services by setting: Kokoro (local, through uv; the setup default since 2026-11-08), ElevenLabs API, Microsoft Edge voices, or recorded audio. Plan: `project/plans/2026-11-08-kokoro-voice-plan.md`.
 
 **Status:** Plan only. Name and licence chosen by the instructor on 2026-10-13. Nothing built.
 
@@ -24,7 +24,7 @@ A `lecturecast.yml` next to the deck or at the course root:
 
 ```yaml
 voice:
-  provider: elevenlabs        # elevenlabs | edge | recorded
+  provider: elevenlabs        # kokoro | edge | elevenlabs | recorded
   narrator: <voice id>        # lecture videos
   host_a: <voice id>          # podcasts
   host_b: <voice id>

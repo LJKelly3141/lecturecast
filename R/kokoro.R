@@ -59,7 +59,10 @@ lc_kokoro_start <- function(timeout = 900, quiet = FALSE) {
   err <- tempfile("kokoro-", fileext = ".log")
   p <- tryCatch(
     processx::process$new(cmd[1], cmd[-1], stdin = "|", stdout = "|", stderr = err,
-                          env = c("current", PYTORCH_ENABLE_MPS_FALLBACK = "1"), cleanup = TRUE),
+                          # Kokoro's own temporary files go in R's session folder,
+                          # which R deletes when it closes.
+                          env = c("current", PYTORCH_ENABLE_MPS_FALLBACK = "1", TMPDIR = tempdir()),
+                          cleanup = TRUE),
     error = function(e) lc_abort("voice (kokoro)", paste0("Could not start Kokoro: ", conditionMessage(e)),
                                  fix = "Run lecturecast_check() to see which tools are missing.")
   )

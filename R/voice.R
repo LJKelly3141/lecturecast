@@ -51,8 +51,17 @@ lc_voice_edge <- function(text, voice_id, cfg, out) {
   args <- c(cmd[-1], "--voice", voice_id, "--file", txt,
             "--write-media", out, "--write-subtitles", srt)
   if (!is.null(cfg$voice$edge_rate)) args <- c(args, paste0("--rate=", cfg$voice$edge_rate))
-  lc_run(cmd[1], args, step = step, file = out, timeout = 180,
-         fix = "Check the voice id with: uvx edge-tts --list-voices. Edge voices need an internet connection.")
+  fix <- "Check the voice id with: uvx edge-tts --list-voices. Edge voices need an internet connection."
+  # The Edge service now and then answers with no audio, and a second try
+  # usually gets through. Retry once after a short pause; a second failure
+  # stops the build.
+  tryCatch(
+    lc_run(cmd[1], args, step = step, file = out, timeout = 180, fix = fix),
+    lecturecast_error = function(e) {
+      Sys.sleep(getOption("lecturecast.edge_retry_wait", 2))
+      lc_run(cmd[1], args, step = step, file = out, timeout = 180, fix = fix)
+    }
+  )
   lc_duration(out, step)
   timing <- if (file.exists(srt)) lc_parse_srt(readLines(srt, encoding = "UTF-8", warn = FALSE)) else NULL
   list(file = out, timing = timing)

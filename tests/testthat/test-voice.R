@@ -66,3 +66,31 @@ test_that("edge-tts is run through uvx, pinned, when not installed", {
   local_mocked_bindings(lc_find_tool = function(tool) "")
   expect_error(lc_edge_command(), "uv is not installed")
 })
+
+test_that("an Edge call that fails once is retried, and a second failure stops", {
+  skip_if_no_ffmpeg()
+  withr::local_options(lecturecast.edge_retry_wait = 0)
+  cfg <- list(voice = list(provider = "edge"))
+  real_run <- lc_run
+  calls <- 0
+  fails <- 1
+  local_mocked_bindings(
+    lc_edge_command = function() "/fake/edge-tts",
+    lc_run = function(cmd, args, step, ...) {
+      # Only the Edge call is faked; ffprobe's duration check runs for real.
+      if (cmd != "/fake/edge-tts") return(real_run(cmd, args, step, ...))
+      calls <<- calls + 1
+      if (calls <= fails) lc_abort(step, "edge-tts exited with status 1: NoAudioReceived")
+      out <- args[which(args == "--write-media") + 1]
+      processx::run("ffmpeg", c("-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=duration=1", out))
+      list(stdout = "", stderr = "")
+    }
+  )
+  v <- lc_voice_edge("Hello.", "en-US-AndrewNeural", cfg, tempfile(fileext = ".mp3"))
+  expect_equal(calls, 2)
+  expect_true(file.exists(v$file))
+  calls <- 0
+  fails <- 2
+  expect_error(lc_voice_edge("Hello.", "en-US-AndrewNeural", cfg, tempfile(fileext = ".mp3")), "NoAudioReceived")
+  expect_equal(calls, 2)
+})
